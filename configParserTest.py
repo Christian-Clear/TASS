@@ -25,7 +25,8 @@ config.read('test.ini')
 #     config.write(configfile)
     
     
-config['files']['other_lev_files'] = 'ni1,ni1_input.lev\nhe1,he1_input.lev'
+# config['files']['other_lev_files'] = 'ni1,ni1_input.lev\nhe1,he1_input.lev'
+config['']['other_lev_files'] = 'ni1,ni1_input.lev\nhe1,he1_input.lev'
 
 
 with open('test.ini', 'w') as configfile:

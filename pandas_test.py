@@ -26,48 +26,103 @@ class KeyList(object):
 
 # df = pd.read_csv('ni2_input.lin')
 # df.to_pickle('panda_test.pkl')
-strans_lev_file = 'ni2_input.lev'
+# strans_lev_file = 'ni2_input.lev'
 df = pd.read_pickle('panda_test.pkl')
+df['user_desig'] = '' # append column of empty lists.
+df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(df.shape[0])]
+
+
+lopt_file = open('lopt_test.inp', 'w')
 #df.set_index('wavenumber')
 
 
-strans_levs = np.loadtxt(strans_lev_file, dtype=str, delimiter=',', skiprows=1)
-strans_levs_even = [x for x in strans_levs if x[-1]=='1']
-strans_levs_even = sorted(strans_levs_even, key=lambda x: x[1])
-strans_levs_odd = [x for x in strans_levs if x[-1]=='0']
-strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x[1])
+# strans_levs = np.loadtxt(strans_lev_file, dtype=str, delimiter=',', skiprows=1)
+# strans_levs_even = [x for x in strans_levs if x[-1]=='1']
+# strans_levs_even = sorted(strans_levs_even, key=lambda x: x[1])
+# strans_levs_odd = [x for x in strans_levs if x[-1]=='0']
+# strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x[1])
 
-strans_wn_discrim = .05
+# strans_wn_discrim = .05
 
-df['main_desig'] = np.empty((len(df), 0)).tolist()
+# df['main_desig'] = np.empty((len(df), 0)).tolist()
 
-desig_list = df[['wavenumber', 'main_desig']].values.tolist()
+# desig_list = df[['wavenumber', 'main_desig']].values.tolist()
 
-#print(strans_levs_even)
+# #print(strans_levs_even)
   
-for even_lev in strans_levs_even:    
-    j_even = float(even_lev[1])
+# for even_lev in strans_levs_even:    
+#     j_even = float(even_lev[1])
     
-    left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even - 1)
-    right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even + 1)
+#     left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even - 1)
+#     right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even + 1)
                     
-    for odd_lev in strans_levs_odd[left_j:right_j]:
-        j_odd = float(odd_lev[1])                    
-        label_even = even_lev[0]
-        label_odd = odd_lev[0]
-        energy_even = float(even_lev[2])
-        energy_odd = float(odd_lev[2])                    
-        match_wn = abs(energy_even - energy_odd)
+#     for odd_lev in strans_levs_odd[left_j:right_j]:
+#         j_odd = float(odd_lev[1])                    
+#         label_even = even_lev[0]
+#         label_odd = odd_lev[0]
+#         energy_even = float(even_lev[2])
+#         energy_odd = float(odd_lev[2])                    
+#         match_wn = abs(energy_even - energy_odd)
             
-        left = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn - strans_wn_discrim)
-        right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + strans_wn_discrim)
+#         left = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn - strans_wn_discrim)
+#         right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + strans_wn_discrim)
             
-        for matched_line in desig_list[left:right]:
-            matched_line[1].append({'even_level': label_even, 'odd_level':label_odd})
+#         for matched_line in desig_list[left:right]:
+#             matched_line[1].append({'even_level': label_even, 'odd_level':label_odd})
     
-df.update(desig_list)
+# df.update(desig_list)
 
-print(df.tail())
+lines = df.loc[df.main_desig.str.len() > 0 ].values.tolist()
+tag_unc = 2.0
+
+
+with open('lopt_test.inp', 'w') as lopt_inp_file:
+    for line in lines:
+        snr = f'{line[2]:9.0f}'
+        wn = f'{line[0]:15.4f}'
+        tag = '      B'
+        tags = line[9]
+        user_desig = line[8]
+        main_desigs = line[6]
+        other_desigs = line[7]
+        #print(line)
+              
+        
+        if not user_desig == '':
+            even_level = f'{user_desig["even_level"]:>11}'
+            odd_level = f'{user_desig["odd_level"]:>11}'
+            
+            if all(value == False for value in tags.values()): # no user defined tags for the line
+                unc = f'{line[5]:.4f}'
+            elif tags['user_unc'] != False:
+                unc = f"{tags['user_unc']:.4f}"
+            else:
+                unc = f'{tag_unc:.4f}'
+            
+            lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+            lopt_inp_file.writelines(lopt_str)
+            
+        else:
+            if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
+                unc = f'{tag_unc:.4f}'
+            elif all(value == False for value in tags.values()): # no user defined tags for the line
+                unc = f'{line[5]:.4f}'
+            elif tags['user_unc'] != False:
+                unc = f"{tags['user_unc']:.4f}"
+            else:
+                unc = f'{tag_unc:.4f}'
+                
+            for desig in main_desigs:
+                even_level = f'{desig["even_level"]:>11}'
+                odd_level = f'{desig["odd_level"]:>11}'
+            
+                lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+                lopt_inp_file.writelines(lopt_str)
+
+        
+        
+    
+# print(df.tail())
 #print(desig_list)
             
             

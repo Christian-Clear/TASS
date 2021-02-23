@@ -18,8 +18,9 @@ class MyFrame(mainWindow):
         self.load_main_config()
         self.load_project()  
         #print(self.df.head())
+        self.lopt_fixed_levels = ['d9  2D2']
         
-
+        
         
          
     def display_strans_levs(self):
@@ -59,7 +60,7 @@ class MyFrame(mainWindow):
             line[5] = f'{line[5]:.4f}' 
             line[6] = main_level_string
             line[7] = other_level_string
-            self.strans_lines_list.Append(line)
+            self.strans_lines_list.Append(line[0:8])  # don't include user_desig, tags etc.
                     
     
     def create_df(self, lines_file):
@@ -67,6 +68,8 @@ class MyFrame(mainWindow):
         self.df = pd.read_csv(lines_file)  # create new dataframe from the input lines file 
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
+        # self.df['user_desig'] = '' # append column of empty lists.
+        # self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(self.df.shape[0])]
         self.save_df()
         
     
@@ -149,6 +152,7 @@ class MyFrame(mainWindow):
         
         self.strans_wn_discrim = self.main_config.getfloat('strans', 'wn_discrim')
         self.project_config_file = self.main_config.get('project', 'project_config')
+        self.lopt_default_unc = self.main_config.getfloat('lopt', 'default_unc')
         
         
     def load_project_config(self):
@@ -193,6 +197,85 @@ class MyFrame(mainWindow):
         
         with open(self.main_config_file, 'w') as configfile:
             self.main_config.write(configfile)
+            
+    def write_lopt_inp(self):
+        with open('lopt_test.inp', 'w') as inp_file:
+            lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()  # create list of all lines with a main designation
+            
+            if lines == []:  # no lines have a main_designation in self.df ie strans has not been run
+                wx.MessageBox(f'No lines found for LOPT input. Please run STRANS first', 'No Matched Lines', 
+                      wx.OK | wx.ICON_EXCLAMATION)
+                return
+            
+            for line in lines:
+                snr = f'{line[2]:9.0f}'
+                wn = f'{line[0]:15.4f}'
+                tag = '       '
+                main_desigs = line[6]
+                other_desigs = line[7] 
+                user_desig = line[8]
+                tags = line[9] 
+                     
+                if not user_desig == '':  # no user defined designation
+                    even_level = f'{user_desig["even_level"]:>11}'
+                    odd_level = f'{user_desig["odd_level"]:>11}'
+                    
+                    if all(value == False for value in tags.values()): # no user defined tags for the line
+                        unc = f'{line[5]:.4f}'
+                    elif tags['user_unc'] != False:
+                        unc = f"{tags['user_unc']:.4f}"
+                    else:
+                        unc = f'{self.lopt_default_unc:.4f}'
+                    
+                    lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+                    inp_file.writelines(lopt_str)
+                    
+                else:
+                    if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
+                        unc = f'{self.lopt_default_unc:.4f}'
+                    elif all(value == False for value in tags.values()): # no user defined tags for the line
+                        unc = f'{line[5]:.4f}'
+                    elif tags['user_unc'] != False:
+                        unc = f"{tags['user_unc']:.4f}"
+                    else:
+                        unc = f'{self.lopt_default_unc:.4f}'
+                        
+                    for desig in main_desigs:
+                        even_level = f'{desig["even_level"]:>11}'
+                        odd_level = f'{desig["odd_level"]:>11}'
+                    
+                        lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+                        inp_file.writelines(lopt_str)
+        
+        
+    def write_lopt_par(self):
+        with open('lopt_test.par', 'r+') as par_file:
+            par_lines = par_file.readlines()
+            par_lines[0] = f'{self.main_element_name}_lopt.inp{par_lines[0][12:]}'
+            par_lines[1] = f'{self.main_element_name}_lopt.fixed{par_lines[1][13:]}'
+            par_lines[2] = f'{self.main_element_name}_lopt.lev{par_lines[2][12:]}'
+            par_lines[3] = f'{self.main_element_name}_lopt.lin{par_lines[3][12:]}'
+            
+            par_file.seek(0)
+            par_file.truncate()  # clear file
+            par_file.writelines(par_lines)
+            
+    
+    def write_lopt_fixed(self):
+        with open('lopt_test.fixed', 'w') as fixed_file:
+            fixed_strings = []
+            
+            for level in self.lopt_fixed_levels:
+                row, col = np.where(self.strans_levs == level)
+                lev_energy = self.strans_levs[row][0][2]                
+                lev_unc = f'{0.0:.4f}'
+                             
+                fixed_strings.append(f'{level:>9}{lev_energy:>9}{lev_unc:>13}')
+            
+            fixed_file.writelines(fixed_strings)        
+            
+    
+            
 
 
 ### Event-driven functions ###            
@@ -229,6 +312,7 @@ class MyFrame(mainWindow):
                 return     # the user changed their mind
     
             filename = fileDialog.GetPath()
+                
             try:
                 with open(filename, 'w') as file:
                     lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()
@@ -260,7 +344,8 @@ class MyFrame(mainWindow):
                         line[6] = main_level_string
                         line[7] = other_level_string
                         
-                        file.writelines(','.join(line) + '\n')                    
+                        file.writelines(','.join(line) + '\n')   
+                        self.frame_statusbar.SetStatusText(f'Linelist exported to {filename}')        
                 
             except:
                 wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
@@ -292,6 +377,19 @@ class MyFrame(mainWindow):
             except:
                 wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
                       wx.OK | wx.ICON_EXCLAMATION)
+                
+    def on_lopt(self, event):
+        """Create/update all neccessary files for LOPT input and then call LOPT"""
+        self.frame_statusbar.SetStatusText('Writing LOPT input files...')
+        self.write_lopt_inp()
+        self.write_lopt_par()
+        self.write_lopt_fixed()
+        self.frame_statusbar.SetStatusText('Running LOPT...')
+        os.system('echo TEST!!!')
+        self.frame_statusbar.SetStatusText('LOPT ran successfully')
+        
+        
+
                 
     def on_Save(self, event):  
         self.save_project()
