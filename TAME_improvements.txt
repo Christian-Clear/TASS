@@ -1,0 +1,1 @@
+1. Add dialog to ask if want to load previously open project on opening Tame. Or add this option as a preference - CvdB 
