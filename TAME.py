@@ -9,6 +9,7 @@ from TAME_GUI import mainWindow
 import os.path
 import bisect
 import configparser
+import subprocess
 
 
 class MyFrame(mainWindow):
@@ -19,6 +20,9 @@ class MyFrame(mainWindow):
         self.load_project()  
         #print(self.df.head())
         self.lopt_fixed_levels = ['d9  2D2']
+        self.lopt_inp_file = 'LOPT/ni2_lopt.inp'
+        self.lopt_par_file = 'LOPT/ni2_lopt.par'
+        self.lopt_fixed_file = 'LOPT/ni2_lopt.fixed'
         
         
         
@@ -43,14 +47,14 @@ class MyFrame(mainWindow):
                     sep = ''
                 else:
                     sep = ',     '
-                main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['even_level'] + ' - ' + lev_pair['odd_level']
+                main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                 
             for lev_pair in line[7]:
                 if not other_level_string:
                     sep = ''
                 else:
                     sep = ',     '
-                other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['even_level'] + ' - ' + lev_pair['odd_level']
+                other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                 
             
             line[0] = f'{line[0]:.4f}'
@@ -65,11 +69,11 @@ class MyFrame(mainWindow):
     
     def create_df(self, lines_file):
         """Creates a new pandas DataFrame from a list of lines in 'lines_file' and saves to a pickle file."""
-        self.df = pd.read_csv(lines_file)  # create new dataframe from the input lines file 
+        self.df = pd.read_csv(lines_file, float_precision='high')  # create new dataframe from the input lines file 
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
-        # self.df['user_desig'] = '' # append column of empty lists.
-        # self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(self.df.shape[0])]
+        self.df['user_desig'] = '' # append column of empty lists.
+        self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(self.df.shape[0])]
         self.save_df()
         
     
@@ -110,6 +114,8 @@ class MyFrame(mainWindow):
         the J selection rule. The list is then compared to all lines in the self.db database and lines with 
         wavenumbers that within self.strans_wn_discrim are assigned the labels of the even and odd level."""
         
+        self.frame_statusbar.SetStatusText(f'Running Strans for {element_name}')
+        
         strans_levs_even = [x for x in strans_levs if x[-1]=='1']  # NOTE: may want to move this to __init__
         strans_levs_odd = [x for x in strans_levs if x[-1]=='0']
         
@@ -138,7 +144,15 @@ class MyFrame(mainWindow):
                 right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + self.strans_wn_discrim)
                     
                 for matched_line in desig_list[left:right]:
-                    matched_line[1].append({'even_level': label_even, 'odd_level':label_odd, 'element_name': element_name})
+                    
+                    if energy_even > energy_odd:
+                        upper_lev = label_even
+                        lower_lev = label_odd
+                    else:
+                        upper_lev = label_odd
+                        lower_lev = label_even
+                        
+                    matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})
                     
         return desig_list
         
@@ -188,18 +202,17 @@ class MyFrame(mainWindow):
     def create_project_config(self):
         """Creates config file for a new project"""
         self.project_config = configparser.ConfigParser()
-        
     
     def save_project(self):
-        """Save changes to project .ini file, .lev file, df file"""
-        
         self.save_df()
+        self.save_main_config()
         
+    def save_main_config(self):        
         with open(self.main_config_file, 'w') as configfile:
             self.main_config.write(configfile)
             
     def write_lopt_inp(self):
-        with open('lopt_test.inp', 'w') as inp_file:
+        with open(self.lopt_inp_file, 'w') as inp_file:
             lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()  # create list of all lines with a main designation
             
             if lines == []:  # no lines have a main_designation in self.df ie strans has not been run
@@ -208,7 +221,7 @@ class MyFrame(mainWindow):
                 return
             
             for line in lines:
-                snr = f'{line[2]:9.0f}'
+                snr = f'{line[1]:9.0f}'
                 wn = f'{line[0]:15.4f}'
                 tag = '       '
                 main_desigs = line[6]
@@ -217,8 +230,8 @@ class MyFrame(mainWindow):
                 tags = line[9] 
                      
                 if not user_desig == '':  # no user defined designation
-                    even_level = f'{user_desig["even_level"]:>11}'
-                    odd_level = f'{user_desig["odd_level"]:>11}'
+                    upper_level = f'{user_desig["upper_level"]:>11}'
+                    lower_level = f'{user_desig["lower_level"]:>11}'
                     
                     if all(value == False for value in tags.values()): # no user defined tags for the line
                         unc = f'{line[5]:.4f}'
@@ -226,8 +239,9 @@ class MyFrame(mainWindow):
                         unc = f"{tags['user_unc']:.4f}"
                     else:
                         unc = f'{self.lopt_default_unc:.4f}'
+                        tag = '       B'
                     
-                    lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+                    lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
                     inp_file.writelines(lopt_str)
                     
                 else:
@@ -239,20 +253,21 @@ class MyFrame(mainWindow):
                         unc = f"{tags['user_unc']:.4f}"
                     else:
                         unc = f'{self.lopt_default_unc:.4f}'
+                        tag = '       B'
                         
                     for desig in main_desigs:
-                        even_level = f'{desig["even_level"]:>11}'
-                        odd_level = f'{desig["odd_level"]:>11}'
+                        upper_level = f'{desig["upper_level"]:>11}'
+                        lower_level = f'{desig["lower_level"]:>11}'
                     
-                        lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+                        lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
                         inp_file.writelines(lopt_str)
         
         
-    def write_lopt_par(self):
-        with open('lopt_test.par', 'r+') as par_file:
+    def write_lopt_par(self):      
+        with open(self.lopt_par_file, 'r+') as par_file:
             par_lines = par_file.readlines()
             par_lines[0] = f'{self.main_element_name}_lopt.inp{par_lines[0][12:]}'
-            par_lines[1] = f'{self.main_element_name}_lopt.fixed{par_lines[1][13:]}'
+            par_lines[1] = f'{self.main_element_name}_lopt.fixed{par_lines[1][14:]}'
             par_lines[2] = f'{self.main_element_name}_lopt.lev{par_lines[2][12:]}'
             par_lines[3] = f'{self.main_element_name}_lopt.lin{par_lines[3][12:]}'
             
@@ -262,7 +277,7 @@ class MyFrame(mainWindow):
             
     
     def write_lopt_fixed(self):
-        with open('lopt_test.fixed', 'w') as fixed_file:
+        with open(self.lopt_fixed_file, 'w') as fixed_file:
             fixed_strings = []
             
             for level in self.lopt_fixed_levels:
@@ -281,12 +296,10 @@ class MyFrame(mainWindow):
 ### Event-driven functions ###            
     
     def on_partial_strans(self, event):  # Run >> Strans(partial)
-        self.frame_statusbar.SetStatusText('Running Strans ...')
         self.main_strans(self.strans_levs)
         self.frame_statusbar.SetStatusText('Strans Complete')
         
     def on_full_strans(self, event):  
-        self.frame_statusbar.SetStatusText('Running Full Strans ...')
         self.main_strans(self.strans_levs)
         self.other_strans(self.other_lev_list)
         self.frame_statusbar.SetStatusText('Strans Complete')
@@ -313,8 +326,8 @@ class MyFrame(mainWindow):
     
             filename = fileDialog.GetPath()
                 
-            try:
-                with open(filename, 'w') as file:
+            # try:
+            with open(filename, 'w') as file:
                     lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()
                     file.writelines('wavenumber,snr,fwhm,eq_width,fit,unc,main_element,other_elements\n') 
                     
@@ -326,14 +339,14 @@ class MyFrame(mainWindow):
                                 sep = ''
                             else:
                                 sep = ',     '
-                            main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['even_level'] + ' - ' + lev_pair['odd_level']
+                            main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                             
                         for lev_pair in line[7]:
                             if not other_level_string:
                                 sep = ''
                             else:
                                 sep = ',     '
-                            other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['even_level'] + ' - ' + lev_pair['odd_level']
+                            other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                             
                         
                         line[0] = f'{line[0]:.4f}'
@@ -344,12 +357,12 @@ class MyFrame(mainWindow):
                         line[6] = main_level_string
                         line[7] = other_level_string
                         
-                        file.writelines(','.join(line) + '\n')   
-                        self.frame_statusbar.SetStatusText(f'Linelist exported to {filename}')        
+                        file.writelines(','.join(line[:7]) + '\n')   
+                        self.frame_statusbar.SetStatusText(f'Matched linelist exported to {filename}')       
                 
-            except:
-                wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
-                      wx.OK | wx.ICON_EXCLAMATION)
+            # except:
+            #     wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
+            #           wx.OK | wx.ICON_EXCLAMATION)
             
         
     def on_Open(self, event):  # File >> Open
@@ -372,6 +385,7 @@ class MyFrame(mainWindow):
                 self.load_project()
                 self.strans_lines_list.DeleteAllItems()
                 self.main_config.set('project', 'project_config', self.project_config_file)
+                self.save_main_config()
                 self.frame_statusbar.SetStatusText('Project loaded successfully')
                 
             except:
@@ -380,15 +394,18 @@ class MyFrame(mainWindow):
                 
     def on_lopt(self, event):
         """Create/update all neccessary files for LOPT input and then call LOPT"""
+        
         self.frame_statusbar.SetStatusText('Writing LOPT input files...')
         self.write_lopt_inp()
         self.write_lopt_par()
         self.write_lopt_fixed()
-        self.frame_statusbar.SetStatusText('Running LOPT...')
-        os.system('echo TEST!!!')
-        self.frame_statusbar.SetStatusText('LOPT ran successfully')
         
-        
+        self.frame_statusbar.SetStatusText('Running LOPT...')        
+        p = subprocess.run(['perl', 'LoptJava.pl', '../ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
+        print(p)
+        rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
+        tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
+        self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')        
 
                 
     def on_Save(self, event):  

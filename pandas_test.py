@@ -27,12 +27,14 @@ class KeyList(object):
 # df = pd.read_csv('ni2_input.lin')
 # df.to_pickle('panda_test.pkl')
 # strans_lev_file = 'ni2_input.lev'
-df = pd.read_pickle('panda_test.pkl')
-df['user_desig'] = '' # append column of empty lists.
-df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(df.shape[0])]
+df = pd.read_pickle('panda_test_2.pkl')
+print(df['wavenumber'])
+print(df['peak'])
+# df['user_desig'] = '' # append column of empty lists.
+# df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(df.shape[0])]
 
 
-lopt_file = open('lopt_test.inp', 'w')
+# lopt_file = open('lopt_test.inp', 'w')
 #df.set_index('wavenumber')
 
 
@@ -72,52 +74,52 @@ lopt_file = open('lopt_test.inp', 'w')
     
 # df.update(desig_list)
 
-lines = df.loc[df.main_desig.str.len() > 0 ].values.tolist()
-tag_unc = 2.0
+# lines = df.loc[df.main_desig.str.len() > 0 ].values.tolist()
+# tag_unc = 2.0
 
 
-with open('lopt_test.inp', 'w') as lopt_inp_file:
-    for line in lines:
-        snr = f'{line[2]:9.0f}'
-        wn = f'{line[0]:15.4f}'
-        tag = '      B'
-        tags = line[9]
-        user_desig = line[8]
-        main_desigs = line[6]
-        other_desigs = line[7]
-        #print(line)
+# with open('lopt_test.inp', 'w') as lopt_inp_file:
+#     for line in lines:
+#         snr = f'{line[2]:9.0f}'
+#         wn = f'{line[0]:15.4f}'
+#         tag = '      B'
+#         tags = line[9]
+#         user_desig = line[8]
+#         main_desigs = line[6]
+#         other_desigs = line[7]
+#         #print(line)
               
         
-        if not user_desig == '':
-            even_level = f'{user_desig["even_level"]:>11}'
-            odd_level = f'{user_desig["odd_level"]:>11}'
+#         if not user_desig == '':
+#             even_level = f'{user_desig["even_level"]:>11}'
+#             odd_level = f'{user_desig["odd_level"]:>11}'
             
-            if all(value == False for value in tags.values()): # no user defined tags for the line
-                unc = f'{line[5]:.4f}'
-            elif tags['user_unc'] != False:
-                unc = f"{tags['user_unc']:.4f}"
-            else:
-                unc = f'{tag_unc:.4f}'
+#             if all(value == False for value in tags.values()): # no user defined tags for the line
+#                 unc = f'{line[5]:.4f}'
+#             elif tags['user_unc'] != False:
+#                 unc = f"{tags['user_unc']:.4f}"
+#             else:
+#                 unc = f'{tag_unc:.4f}'
             
-            lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
-            lopt_inp_file.writelines(lopt_str)
+#             lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+#             lopt_inp_file.writelines(lopt_str)
             
-        else:
-            if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
-                unc = f'{tag_unc:.4f}'
-            elif all(value == False for value in tags.values()): # no user defined tags for the line
-                unc = f'{line[5]:.4f}'
-            elif tags['user_unc'] != False:
-                unc = f"{tags['user_unc']:.4f}"
-            else:
-                unc = f'{tag_unc:.4f}'
+#         else:
+#             if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
+#                 unc = f'{tag_unc:.4f}'
+#             elif all(value == False for value in tags.values()): # no user defined tags for the line
+#                 unc = f'{line[5]:.4f}'
+#             elif tags['user_unc'] != False:
+#                 unc = f"{tags['user_unc']:.4f}"
+#             else:
+#                 unc = f'{tag_unc:.4f}'
                 
-            for desig in main_desigs:
-                even_level = f'{desig["even_level"]:>11}'
-                odd_level = f'{desig["odd_level"]:>11}'
+#             for desig in main_desigs:
+#                 even_level = f'{desig["even_level"]:>11}'
+#                 odd_level = f'{desig["odd_level"]:>11}'
             
-                lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
-                lopt_inp_file.writelines(lopt_str)
+#                 lopt_str = f'{snr}{wn} cm-1 {unc}{even_level}{odd_level}{tag}\n'
+#                 lopt_inp_file.writelines(lopt_str)
 
         
         
