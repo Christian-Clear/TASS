@@ -403,7 +403,7 @@ class MyFrame(mainWindow):
         self.write_lopt_fixed()
         
         self.frame_statusbar.SetStatusText('Running LOPT...')        
-        p = subprocess.run(['perl', 'LoptJava.pl', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
+        p = subprocess.run(['java', '-jar', 'Lopt.jar', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
         print(p)
         rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
         tot_time = [x for x in p if 'Total time' in x]  # gives the total time line

@@ -1,85 +1,87 @@
 use strict;
 
 ############################################################################
-sub transpose($) {   #01/18/2011 3:36PM
-############################################################################
-  my $A = shift;
-  my $rows = $#{$A} + 1;
-  my $cols = $#{$A->[0]} + 1;
-  my $B = [];
-  for ( my $j = 0; $j < $cols; $j++ ) {
-    $B->[$j] = [];
-  }
-  for ( my $i = 0; $i < $rows; $i++ ) {
-    for ( my $j = 0; $j < $cols; $j++ ) {
-      $B->[$j]->[$i] = $A->[$i]->[$j];
-    }
-  }
-  return $B;
-} ##transpose($)
-
-############################################################################
 sub LUDecomposition($) {   #12/08/2009 6:53PM
 ############################################################################
   # Calculate an LU decomposition of a matrix.
   #@param $A   square matrix n x n
   #@return     LU(r(:),:)
   #
+  # This method is not used in the current version, as it turned out to be
+  # twice as slow as LUDecomposition1() below.
+  # However, it has somewhat lower numerical errors and may be used if needed.
+
   # Adapted from JAMA package, J. Hicklin, C. Moler, P. Webb, R.F. Boisvert,
   # B. Miller, R. Pozo, K. Remington, JAMA: A Java Matrix Package,
   # online at http://math.nist.gov/javanumerics/jama/ (2005),
+  # and optimized for Perl.
 
   my $A = shift;
-  my $N = $#{$A} + 1;
+    # Use a "left-looking", dot-product, Crout/Doolittle algorithm.
 
-  return if ($N<=0);
-
-  open(M_OUT, ">matrix_in.txt") or die ("Could not create file matrix_in.txt");
-
-  print M_OUT &MatrixToString($A,' ');
-  close M_OUT or die "Error closing file matrix_in.txt";
-
-  my $java_output = `java -jar InvertMatrix.jar LU 0 0`;
-  print $java_output;
-  return &LUDecomposition1($A) if ( $java_output =~ /error/i );
-
-  open(M_IN, "<matrix_out.txt") or die ("Could not open file matrix_out.txt");
-
-  my $result = [];
-  my $s;
-  my $i = -2;
-  while ( ($s = <M_IN>) && (defined $s) ) {
-    $i++;
-    last if ($i == $N);
-    next if $i < 0; # skip the first line
-    chomp $s;
-    next unless $s;
-    $s =~ s/^\s+|\s+$//;
-    my @row = split(/ +/, $s);
-    $result->[$i] = \@row;
+      # Initialize.
+  my @LU = ();
+  my $n = $#{$A} + 1; # dimension of square matrix $A
+  my @piv = ();
+  for (my $i = 0; $i < $n; $i++) {
+    $piv[$i] = $i;
+    $LU[$i] = [];
+    push(@{$LU[$i]},@{$A->[$i]});
   }
-  if ( $i != $N ) {
-    die "Matrix size after LU decomposion $i does not match the input matrix size $N\n";
-  }
-  my $pivot = [];
-  while ( ($s = <M_IN>) && (defined $s) ) {
-    chomp $s;
-    $s =~ s/^\s+|\s+$//;
-    next unless $s;
-    my @row = split(/ +/, $s);
-    $i = $#row + 1;
-    if ( $i != $N ) {
-      die "Pivot size after LU decomposion $i does not match the input matrix size $N\n";
+  #my $pivsign = 1;
+  my @LUcolj = ();
+
+  # Outer loop.
+
+  for (my $j = 0; $j < $n; $j++) {
+
+    # Make a copy of the j-th column to localize references.
+
+    for (my $i = 0; $i < $n; $i++) {
+      $LUcolj[$i] = $LU[$i]->[$j];
     }
-    for ( my $j = 0; $j < $N; $j++ ) {
-      my $p = int($row[$j] + 0.1);
-      $row[$j] = $p;
+
+    # Apply previous transformations.
+
+    for (my $i = 0; $i < $n; $i++) {
+      my $LUrowi = $LU[$i];
+
+      # Most of the time is spent in the following dot product.
+
+      my $kmax = $i < $j ? $i : $j;
+      my $s = 0.0;
+      for (my $k = 0; $k < $kmax; $k++) {
+        $s += $LUrowi->[$k]*$LUcolj[$k];
+      }
+
+      $LUrowi->[$j] = $LUcolj[$i] -= $s;
     }
-    $pivot = \@row;
-    last;
+
+    # Find pivot and exchange if necessary.
+
+    my $p = $j;
+    for (my $i = $j+1; $i < $n; $i++) {
+      $p = $i if (abs($LUcolj[$i]) > abs($LUcolj[$p]));
+    }
+    if ($p != $j) {
+      my $t = $LU[$p]; $LU[$p] = $LU[$j]; $LU[$j] = $t;
+      my $k = $piv[$p]; $piv[$p] = $piv[$j]; $piv[$j] = $k;
+      #$pivsign = -$pivsign;
+    }
+
+    # Compute multipliers.
+
+    if ( ($j < $n) && $LU[$j]->[$j] ) {
+      my $LUjj = 1/$LU[$j]->[$j];
+      for (my $i = $j+1; $i < $n; $i++) {
+        $LU[$i]->[$j] *= $LUjj;
+      }
+    } else {
+      # Error: matrix is not invertible. Return the index of error row
+      return ($j);
+    }
   }
-  close(M_IN);
-  return ($result,$pivot);
+  return (\@LU,\@piv);
 } ##LUDecomposition($)
 
 sub LUDecomposition1 ($) {
@@ -142,6 +144,26 @@ sub LUDecomposition1 ($) {
 } ##LUDecomposition1($)
 
 ############################################################################
+sub getPermutedMatrix($$) {   #12/09/2009 6:44PM
+############################################################################
+  # Get a submatrix.
+  #@param $A   square matrix n x n
+  #@param $r   Array of row indices.
+  #@return     A(r(:),:)
+
+  my ($A,$r) = @_;
+  my $B = [];
+  my $num_rows = $#{$r} + 1;
+  for (my $i = 0; $i < $num_rows; $i++) {
+    $B->[$i] = [];
+    push(@{$B->[$i]},@{$A->[$r->[$i]]});
+  }
+  return $B;
+} ##getPermutedMatrix($$)
+
+
+
+############################################################################
 sub LUSolve($$$) {  #12/09/2009 2:51PM
 ############################################################################
  #     Solve A*X = B  where A = LU
@@ -155,85 +177,51 @@ sub LUSolve($$$) {  #12/09/2009 2:51PM
   # and optimized for Perl.
 
   my ($LU,$B,$piv) = @_;
+
+  # Copy right hand side with pivoting
   my $n = $#{$LU} + 1; # number of rows of square matrix $LU and of $B
   my $nx = $#{$B->[0]} + 1; # number of columns of $B
-  return if (($n<=0) || ($nx<=0));
+  my $X = getPermutedMatrix($B,$piv);
 
-  open(M_OUT, ">matrix_in.txt") or die ("Could not create file matrix_in.txt");
-
-  print M_OUT &MatrixToString($LU,' ');
-  print M_OUT &MatrixToString(&transpose($B),' ');
-  print M_OUT join(' ',@{$piv}) . "\n";
-  close M_OUT or die "Error closing file matrix_in.txt";
-
-  my $java_output = `java -jar InvertMatrix.jar LUS 0 0`;
-  print $java_output;
-  return '' if ( $java_output =~ /error/i );
-
-  open(M_IN, "<matrix_out.txt") or die ("Could not open file matrix_out.txt");
-
-  my $result = [];
-  my $s;
-  my $i = -2;
-  while ( ($s = <M_IN>) && (defined $s) ) {
-    $i++;
-    next if $i < 0; # skip the first line
-    chomp $s;
-    next unless $s;
-    $s =~ s/^\s+|\s+$//;
-    my @row = split(/ +/, $s);
-    $result->[$i] = \@row;
+  # Solve L*Y = B(piv,:)
+  for (my $k = 0; $k < $n; $k++) {
+    my $Xk = $X->[$k];
+    for (my $i = $k+1; $i < $n; $i++) {
+      # Take advantage of sparsity of $A: skip the inner cycle
+      # if $LU->[$i]->[$k] is zero.
+      if ( $LU->[$i]->[$k] ) {
+        my $LUik = $LU->[$i]->[$k];
+        my $Xi = $X->[$i];
+        for (my $j = 0; $j < $nx; $j++) {
+          $Xi->[$j] -= $Xk->[$j]*$LUik;
+        }
+      }
+    }
   }
-  if ( $i != $n ) {
-    die "Matrix size after LUSolve $i does not match the input matrix size $n\n";
+  # Solve U*X = Y;
+  for (my $k = $n-1; $k >= 0; $k--) {
+    my $Xk = $X->[$k];
+    my $LUkk = 1/$LU->[$k]->[$k];
+    for (my $j = 0; $j < $nx; $j++) {
+      $Xk->[$j] *= $LUkk;
+    }
+    for (my $i = 0; $i < $k; $i++) {
+      # Take advantage of sparsity of $A: skip the inner cycle
+      # if $LU->[$i]->[$k] is zero.
+      if ( $LU->[$i]->[$k] ) {
+        my $LUik = $LU->[$i]->[$k];
+        my $Xi = $X->[$i];
+        for (my $j = 0; $j < $nx; $j++) {
+          $Xi->[$j] -= $Xk->[$j]*$LUik;
+        }
+      }
+    }
   }
-  close(M_IN);
-  return $result;
+  return $X;
 } ##LUSolve($$)
 
 ############################################################################
 sub CholeskyDecomposition($) {
-#    Cholesky algorithm for symmetric and positive definite matrix.
-#   @param  A   Square, symmetric matrix.
-#   @return     Structure to access L and isspd flag.
-############################################################################
-  my $A = shift;
-      # Initialize.
-  my $N = $#{$A} + 1; # dimension of square matrix $A
-  return if ($N<=0);
-
-  open(M_OUT, ">matrix_in.txt") or die ("Could not create file matrix_in.txt");
-
-  print M_OUT &MatrixToString($A,' ');
-  close M_OUT or die "Error closing file matrix_in.txt";
-
-  my $java_output = `java -jar InvertMatrix.jar CH 0 0`;
-  print $java_output;
-  return &CholeskyDecomposition1($A) if ( $java_output =~ /error/i );
-
-  open(M_IN, "<matrix_out.txt") or die ("Could not open file matrix_out.txt");
-
-  my $result = [];
-  my $s;
-  my $i = -2;
-  while ( ($s = <M_IN>) && (defined $s) ) {
-    $i++;
-    next if $i < 0; # skip the first line
-    chomp $s;
-    next unless $s;
-    $s =~ s/^\s+|\s+$//;
-    my @row = split(/ +/, $s);
-    $result->[$i] = \@row;
-  }
-  if ( $i != $N ) {
-    die "Matrix size after Cholesky decomposion $i does not match the input matrix size $N\n";
-  }
-  close(M_IN);
-  return $result;
-}
-
-############################################################################
-sub CholeskyDecomposition1($) {
 #    Cholesky algorithm for symmetric and positive definite matrix.
 #   @param  A   Square, symmetric matrix.
 #   @return     Structure to access L and isspd flag.
@@ -299,37 +287,50 @@ sub SolveCholesky($$) { #01/28/2010 10:51AM
   my ($L,$B) = @_;
   my $n = $#{$L} + 1; # dimension of square matrix $L -- must be the same as row dimension of $B
   my $nx = $#{$B->[0]} + 1; # column dimension of $B
-  return if (($n<=0) || ($nx<=0));
 
-  open(M_OUT, ">matrix_in.txt") or die ("Could not create file matrix_in.txt");
-
-  print M_OUT &MatrixToString($L,' ');
-  print M_OUT &MatrixToString(&transpose($B),' ');
-  close M_OUT or die "Error closing file matrix_in.txt";
-
-  my $java_output = `java -jar InvertMatrix.jar CHS 0 0`;
-  print $java_output;
-  return '' if ( $java_output =~ /error/i );
-
-  open(M_IN, "<matrix_out.txt") or die ("Could not open file matrix_out.txt");
-
-  my $result = [];
-  my $s;
-  my $i = -2;
-  while ( ($s = <M_IN>) && (defined $s) ) {
-    $i++;
-    next if $i < 0; # skip the first line
-    chomp $s;
-    next unless $s;
-    $s =~ s/^\s+|\s+$//;
-    my @row = split(/ +/, $s);
-    $result->[$i] = \@row;
+      # Transpose the right hand side.
+  my $XT = [];
+  for ( my $i = 0; $i< $n; $i++ ) {
+    for ( my $j = 0; $j< $nx; $j++ ) {
+      $XT->[$j]->[$i] = $B->[$i]->[$j];
+    }
   }
-  if ( $i != $n ) {
-    die "Matrix size after SolveCholesky $i does not match the input matrix size $n\n";
+
+      # Solve L*Y = X;
+  for (my $k = 0; $k < $n; $k++) {
+    my $Lk = $L->[$k];
+    my $Lkk = $Lk->[$k];
+    for (my $j = 0; $j < $nx; $j++) {
+      my $XTj = $XT->[$j];
+      my $Xkj = $XTj->[$k];
+      for (my $i = 0; $i < $k; $i++) {
+        $Xkj -= $XTj->[$i]*$Lk->[$i];
+      }
+      $XTj->[$k] = $Xkj / $Lkk;
+    }
   }
-  close(M_IN);
-  return $result;
+
+    # Solve L'*X = Y;
+  for (my $k = $n-1; $k >= 0; $k--) {
+    my $Lkk = $L->[$k]->[$k];
+    for (my $j = 0; $j < $nx; $j++) {
+      my $XTj = $XT->[$j];
+      my $Xkj = $XTj->[$k];
+      for (my $i = $k+1; $i < $n; $i++) {
+        $Xkj -= $XTj->[$i]*$L->[$i]->[$k];
+      }
+      $XTj->[$k] = $Xkj / $Lkk;
+    }
+  }
+
+    # Transpose $XT to get the solution
+  my $X = [];
+  for ( my $i = 0; $i< $n; $i++ ) {
+    for ( my $j = 0; $j< $nx; $j++ ) {
+      $X->[$i]->[$j] = $XT->[$j]->[$i];
+    }
+  }
+  return $X;
 } ##SolveCholesky
 
 ############################################################################
@@ -343,45 +344,58 @@ sub InvertMatrix($$;$) {   #12/10/2009 11:22AM
  #  @return  $BIG     largest deviation of A*A^-1 - I from zero if $InvChk==1 and matrix is invertible
 
   my ($A, $InvChk, $UseCholesky) = @_;
-  $InvChk += 0;
-  $UseCholesky += 0;
-  my $N = $#{$A} + 1;
-  return if ($N<=0);
-
-  open(M_OUT, ">matrix_in.txt") or die ("Could not create file matrix_in.txt");
-
-  print M_OUT &MatrixToString($A,' ');
-  close M_OUT or die "Error closing file matrix_in.txt";
-
-  my $java_output = `java -jar InvertMatrix.jar INV $InvChk $UseCholesky`;
-  if ( $java_output =~ /error/i ) {
-    print $java_output;
-    return '';
+  my $dim = $#{$A} + 1;
+  my $I = [];
+  for ( my $i = 0; $i < $dim; $i++ ) {
+    $I->[$i] = [];
+    for ( my $j = 0; $j < $dim; $j++ ) {
+      $I->[$i]->[$j] = 0;
+    }
+  }
+  for ( my $i = 0; $i < $dim; $i++ ) {
+    $I->[$i]->[$i] = 1;
   }
 
-  my ($RMS,$BIG) = (0,0);
-  if ( $java_output =~ /RMS = ([0-9.E+-]+) +Largest deviation = ([0-9.E+-]+)/mi ) {
-    ($RMS,$BIG) = ($1, $2);
+  my $B;
+
+  if ( !$UseCholesky ) {
+    my ($LU,$piv) = LUDecomposition1($A);
+    if ( ref($LU) ne 'ARRAY' ) {
+      # Error: matrix is not invertible. Return the index of the error row
+      return ($LU);
+    }
+    $B = LUSolve($LU,$I,$piv);
+  } else {
+    my $L = CholeskyDecomposition($A);
+    if ( ref($L) ne 'ARRAY' ) {
+      # Error: matrix is not invertible. Return the index of the error row
+      # or -1 if matrix is asymmetric.
+      return ($L);
+    }
+    $B = SolveCholesky($L,$I);
   }
 
-  open(M_IN, "<matrix_out.txt") or die ("Could not open file matrix_out.txt");
-
-  my $result = [];
-  my $s;
-  my $i = -2;
-  while ( ($s = <M_IN>) && (defined $s) ) {
-    $i++;
-    next if $i < 0; # skip the first line
-    chomp $s;
-    next unless $s;
-    $s =~ s/^\s+|\s+$//;
-    my @row = split(/ +/, $s);
-    $result->[$i] = \@row;
+  my $RMS = 0;
+  my $BIG = 0;
+  if ($InvChk) {
+    for (my $i = 0; $i < $dim; $i++) {
+      my $PA = $A->[$i];
+      for (my $j = 0; $j < $dim; $j++) {
+        my $Aij = ($j == $i) ? -1 : 0;
+        for (my $k = 0; $k < $dim; $k++) {
+          $Aij += $PA->[$k]*$B->[$k]->[$j];
+        }
+        $Aij *= $Aij;
+        $RMS += $Aij;
+        if ($Aij > $BIG) {
+          $BIG = $Aij;
+        }
+      }
+    }
+    $RMS = sqrt($RMS/(0.5*$dim*($dim+1)));
+    $BIG = sqrt($BIG);
   }
-  if ( $i != $N ) {
-    die "Matrix size after inversion $i does not match the size before inversion $N\n";
-  }
-  return ($result,$RMS,$BIG);
+  return ($B,$RMS,$BIG);
 } ##InvertMatrix($$;$)
 
 ############################################################################
