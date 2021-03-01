@@ -73,7 +73,7 @@ class MyFrame(mainWindow):
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['user_desig'] = '' # append column of empty lists.
-        self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(self.df.shape[0])]
+        self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
         self.save_df()
         
     
@@ -86,10 +86,9 @@ class MyFrame(mainWindow):
         """Runs strans for the main element under study"""
                      
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in main_desig column with empty lists
-        desig_list = self.df[['wavenumber', 'main_desig']].values.tolist()
+        desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()
           
-        matched_lines = self.strans(strans_levs, desig_list, self.main_element_name)
-            
+        matched_lines = self.strans(strans_levs, desig_list, self.main_element_name)          
         self.df.update(matched_lines)  
         self.display_strans_lines()
         
@@ -98,13 +97,13 @@ class MyFrame(mainWindow):
         """Runs strans for all other elements that could be present in the linelist"""
                      
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in other_desig column with empty lists
-        desig_list = self.df[['wavenumber', 'other_desig']].values.tolist()
+        desig_list = self.df[['wavenumber', 'other_desig', 'line_tags']].values.tolist()
         
         for other_lev in other_lev_list:
             element_name, level_file = other_lev.split(',')
             strans_levs = np.loadtxt(level_file, dtype=str, delimiter=',', skiprows=1) 
             matched_lines = self.strans(strans_levs, desig_list, element_name)
-            
+
         self.df.update(matched_lines)  
         self.display_strans_lines()
         
@@ -145,7 +144,10 @@ class MyFrame(mainWindow):
                     
                 for matched_line in desig_list[left:right]:
                     
-                    if energy_even > energy_odd:
+                    if len(desig_list[left:right]) > 1:  # multiple lines match this transtion
+                        matched_line[2]['multiple_lines'] = True
+                    
+                    if energy_even > energy_odd:  # assign upper and lower levels correctly (LOPT needs them in lower-upper format)
                         upper_lev = label_even
                         lower_lev = label_odd
                     else:
@@ -153,7 +155,7 @@ class MyFrame(mainWindow):
                         lower_lev = label_even
                         
                     matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})
-                    
+         
         return desig_list
         
         
@@ -229,7 +231,7 @@ class MyFrame(mainWindow):
                 user_desig = line[8]
                 tags = line[9] 
                      
-                if not user_desig == '':  # no user defined designation
+                if not user_desig == '':  # user label for line
                     upper_level = f'{user_desig["upper_level"]:>11}'
                     lower_level = f'{user_desig["lower_level"]:>11}'
                     
@@ -244,7 +246,7 @@ class MyFrame(mainWindow):
                     lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
                     inp_file.writelines(lopt_str)
                     
-                else:
+                else:  # no user label for line
                     if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
                         unc = f'{self.lopt_default_unc:.4f}'
                     elif all(value == False for value in tags.values()): # no user defined tags for the line
@@ -401,7 +403,7 @@ class MyFrame(mainWindow):
         self.write_lopt_fixed()
         
         self.frame_statusbar.SetStatusText('Running LOPT...')        
-        p = subprocess.run(['perl', 'LoptJava.pl', '../ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
+        p = subprocess.run(['perl', 'LoptJava.pl', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
         print(p)
         rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
         tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
