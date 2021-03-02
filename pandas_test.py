@@ -10,26 +10,26 @@ import numpy as np
 import pandas as pd
 import bisect
 
-class KeyList(object):
-    # bisect doesn't accept a key function, so we build the key into our sequence.
-    def __init__(self, l, key):
-        self.l = l
-        self.key = key
-    def __len__(self):
-        return len(self.l)
-    def __getitem__(self, index):
-        return self.key(self.l[index])
+# class KeyList(object):
+#     # bisect doesn't accept a key function, so we build the key into our sequence.
+#     def __init__(self, l, key):
+#         self.l = l
+#         self.key = key
+#     def __len__(self):
+#         return len(self.l)
+#     def __getitem__(self, index):
+#         return self.key(self.l[index])
 
 
 
 
 
-# df = pd.read_csv('ni2_input.lin')
-# df.to_pickle('panda_test.pkl')
-# strans_lev_file = 'ni2_input.lev'
-df = pd.read_pickle('panda_test_2.pkl')
-print(df['wavenumber'])
-print(df['peak'])
+# # df = pd.read_csv('ni2_input.lin')
+# # df.to_pickle('panda_test.pkl')
+# # strans_lev_file = 'ni2_input.lev'
+# df = pd.read_pickle('panda_test_2.pkl')
+# print(df['wavenumber'])
+# print(df['peak'])
 # df['user_desig'] = '' # append column of empty lists.
 # df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False} for x in range(df.shape[0])]
 
@@ -126,6 +126,20 @@ print(df['peak'])
     
 # print(df.tail())
 #print(desig_list)
+
+df2 = pd.read_csv('LOPT/ni2_lopt.lev', delimiter='\t')
+df3 = pd.read_csv('LOPT/ni2_lopt.lin', delimiter='\t')
+df2 = list(df2.transpose().to_dict().values()) 
+df3 = list(df3.transpose().to_dict().values()) 
+
+
+
+for lev in df2:
+    label = lev['Designation']
+    for line in df3:
+        if label == line['L1'] or label == line['L2']:
+            print(label, line['W_obs'])
+
             
             
             

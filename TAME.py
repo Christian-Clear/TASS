@@ -10,6 +10,8 @@ import os.path
 import bisect
 import configparser
 import subprocess
+from ObjectListView import ColumnDefn
+
 
 
 class MyFrame(mainWindow):
@@ -25,46 +27,57 @@ class MyFrame(mainWindow):
         self.lopt_fixed_file = 'LOPT/ni2_lopt.fixed'
         
         
+        self.strans_lev_ojlv.SetColumns([
+            ColumnDefn("Level", "left", 100, 'label'),
+            ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f"),
+            ColumnDefn("Energy (cm-1)", "left", 120, 'energy', stringConverter="%.4f"),           
+            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling = True)])
+        
+        self.strans_lines_ojlv.SetColumns([
+            ColumnDefn('Wavenumber (cm-1)', 'left', 150, 'wavenumber', stringConverter="%.4f"),
+            ColumnDefn('SNR', 'left', 40, 'peak', stringConverter="%d"),
+            ColumnDefn('FHWM (mK)', 'left', 90, 'width', stringConverter="%d"),
+            ColumnDefn('log(Eq. Width)', 'left', 110, 'eq width', stringConverter="%.2f"),
+            ColumnDefn('Fit', 'left', 30, 'tags'),
+            ColumnDefn('Unc. (cm-1)', 'left', 90, 'unc', stringConverter="%.4f"),
+            ColumnDefn('Main Element Transitions', 'left', 500, 'main_desig'),
+            ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig')])
+        
+        self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
+       
         
          
     def display_strans_levs(self):
-        """Writes values from a list to the strans_level_list listctrl"""
-        self.strans_level_list.DeleteAllItems()
-        for lev in self.strans_levs:
-            self.strans_level_list.Append(lev)
+        """Writes values from a list to the strans_lev_ojlv ObjectListView"""
+        self.strans_lev_ojlv.SetObjects(self.strans_levs)
 
             
     def display_strans_lines(self):
-        """Writes lines with designations from self.df to the strans_lines_list listctrl"""   
-        self.strans_lines_list.DeleteAllItems()
-        lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()
-
-        for line in lines:
+        """Writes lines with designations from self.df to the strans_lines_ojlv ObjectListView"""   
+        strans_lines = list(self.df.loc[self.df.main_desig.str.len() > 0 ].transpose().to_dict().values())
+        
+        for line in strans_lines:
             main_level_string = ''
             other_level_string = ''
-            for lev_pair in line[6]:
+            for lev_pair in line['main_desig']:
                 if not main_level_string:
                     sep = ''
                 else:
-                    sep = ',     '
+                    sep = ';  \t'
                 main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                 
-            for lev_pair in line[7]:
+            for lev_pair in line['other_desig']:
                 if not other_level_string:
                     sep = ''
                 else:
                     sep = ',     '
                 other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                 
+            line['eq width'] = float(np.log(line['eq width']))
+            line['main_desig'] = main_level_string
+            line['other_desig'] = other_level_string
             
-            line[0] = f'{line[0]:.4f}'
-            line[1] = f'{line[1]:.0f}' 
-            line[2] = f'{line[2]:.0f}' 
-            line[3] = f'{line[3]:.0f}' 
-            line[5] = f'{line[5]:.4f}' 
-            line[6] = main_level_string
-            line[7] = other_level_string
-            self.strans_lines_list.Append(line[0:8])  # don't include user_desig, tags etc.
+        self.strans_lines_ojlv.SetObjects(strans_lines)
                     
     
     def create_df(self, lines_file):
@@ -101,7 +114,8 @@ class MyFrame(mainWindow):
         
         for other_lev in other_lev_list:
             element_name, level_file = other_lev.split(',')
-            strans_levs = np.loadtxt(level_file, dtype=str, delimiter=',', skiprows=1) 
+            strans_levs = list(pd.read_csv(level_file).transpose().to_dict().values())
+            # strans_levs = np.loadtxt(level_file, dtype=str, delimiter=',', skiprows=1) 
             matched_lines = self.strans(strans_levs, desig_list, element_name)
 
         self.df.update(matched_lines)  
@@ -115,28 +129,29 @@ class MyFrame(mainWindow):
         
         self.frame_statusbar.SetStatusText(f'Running Strans for {element_name}')
         
-        strans_levs_even = [x for x in strans_levs if x[-1]=='1']  # NOTE: may want to move this to __init__
-        strans_levs_odd = [x for x in strans_levs if x[-1]=='0']
         
-        strans_levs_even = sorted(strans_levs_even, key=lambda x: x[1])
-        strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x[1])
+        strans_levs_even = [x for x in strans_levs if x['parity']==1]
+        strans_levs_odd = [x for x in strans_levs if x['parity']==0]
+
         
+        strans_levs_even = sorted(strans_levs_even, key=lambda x: x['j'])
+        strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x['j'])
         
         for even_lev in strans_levs_even:    
-            j_even = float(even_lev[1])
+            j_even = even_lev['j']
             
             if j_even == 0.0:  # J selection rule J != 0 to 0
-                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even + 1)
+                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)
             else:  # the other J selection 
-                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even - 1)
+                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even - 1)
                 
-            right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: float(x[1])), j_even + 1)
+            right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)
                             
             for odd_lev in strans_levs_odd[left_j:right_j]:                
-                label_even = even_lev[0]
-                label_odd = odd_lev[0]
-                energy_even = float(even_lev[2])
-                energy_odd = float(odd_lev[2])                    
+                label_even = even_lev['label']
+                label_odd = odd_lev['label']
+                energy_even = even_lev['energy']
+                energy_odd = odd_lev['energy']                   
                 match_wn = abs(energy_even - energy_odd)
                     
                 left = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn - self.strans_wn_discrim)
@@ -155,7 +170,7 @@ class MyFrame(mainWindow):
                         lower_lev = label_even
                         
                     matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})
-         
+                    
         return desig_list
         
         
@@ -195,8 +210,8 @@ class MyFrame(mainWindow):
     def load_project(self):
         """Set all filenames and variables and load/reload all listctrls."""
         self.load_project_config()
-        self.load_df()               
-        self.strans_levs = np.loadtxt(self.strans_lev_file, dtype=str, delimiter=',', skiprows=1)        
+        self.load_df()             
+        self.strans_levs = list(pd.read_csv(self.strans_lev_file).transpose().to_dict().values())                 
         self.display_strans_levs() 
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
         
@@ -283,8 +298,8 @@ class MyFrame(mainWindow):
             fixed_strings = []
             
             for level in self.lopt_fixed_levels:
-                row, col = np.where(self.strans_levs == level)
-                lev_energy = self.strans_levs[row][0][2]                
+                strans_lev = next((item for item in self.strans_levs if item['label']==level))
+                lev_energy = strans_lev['energy']              
                 lev_unc = f'{0.0:.4f}'
                              
                 fixed_strings.append(f'{level:>9}{lev_energy:>9}{lev_unc:>13}')
@@ -309,11 +324,8 @@ class MyFrame(mainWindow):
             
     def on_strans_del(self, event):  
         """Delete levels from self.strans_lev_file. This will be a permanent change."""
-        # item = -1
-        # for i in range(self.strans_level_list.GetSelectedItemCount()):
-        #     item = self.strans_level_list.GetNextSelected(item)
-        #     print(item)
-        if wx.MessageBox(f'Are you sure you want to delete these {self.strans_level_list.GetSelectedItemCount()} levels?', 'Delete Levels?', 
+
+        if wx.MessageBox(f'Are you sure you want to delete these levels? \nThis will be a permanent change.', 'Delete Levels?', 
                       wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:
             print('Deleted!')
         else:
@@ -385,7 +397,6 @@ class MyFrame(mainWindow):
             self.project_config_file = fileDialog.GetPath()
             try:
                 self.load_project()
-                self.strans_lines_list.DeleteAllItems()
                 self.main_config.set('project', 'project_config', self.project_config_file)
                 self.save_main_config()
                 self.frame_statusbar.SetStatusText('Project loaded successfully')
