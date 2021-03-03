@@ -9,6 +9,7 @@ Created on Fri Feb 12 15:49:01 2021
 import numpy as np
 import pandas as pd
 import bisect
+from ObjectListView import ObjectListView, ColumnDefn, ListGroup
 
 # class KeyList(object):
 #     # bisect doesn't accept a key function, so we build the key into our sequence.
@@ -27,7 +28,8 @@ import bisect
 # # df = pd.read_csv('ni2_input.lin')
 # # df.to_pickle('panda_test.pkl')
 # # strans_lev_file = 'ni2_input.lev'
-# df = pd.read_pickle('panda_test_2.pkl')
+df = pd.read_pickle('panda_test_2.pkl')
+#print(df['wavenumber'])
 # print(df['wavenumber'])
 # print(df['peak'])
 # df['user_desig'] = '' # append column of empty lists.
@@ -130,15 +132,26 @@ import bisect
 df2 = pd.read_csv('LOPT/ni2_lopt.lev', delimiter='\t')
 df3 = pd.read_csv('LOPT/ni2_lopt.lin', delimiter='\t')
 df2 = list(df2.transpose().to_dict().values()) 
-df3 = list(df3.transpose().to_dict().values()) 
+#df3 = list(df3.transpose().to_dict().values()) 
 
+#print(df3['W_obs'])
 
-
+# for lev in df2:
+#     label = lev['Designation']
+#     df4 = df3.loc[(df3['L1'] == lev['Designation']) | (df3['L2'] == lev['Designation'])]
+#     df5 = pd.merge(df, df4, left_on='wavenumber', right_on='W_obs')
 for lev in df2:
-    label = lev['Designation']
-    for line in df3:
-        if label == line['L1'] or label == line['L2']:
-            print(label, line['W_obs'])
+    df4 = df3.loc[(df3['L1'] == lev['Designation']) | (df3['L2'] == lev['Designation'])]
+    merged = pd.merge_asof(df4, df, left_on='W_obs', right_on='wavenumber', 
+                   tolerance=0.005, direction='nearest')[['W_obs','wavenumber', 'L1', 'L2']]
+    x = ListGroup(lev['Designation'], merged)
+    # print(x)
+    # print(lev['Designation'], merged)
+    
+print(df.columns)
+
+    
+    
 
             
             

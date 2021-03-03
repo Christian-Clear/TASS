@@ -10,7 +10,7 @@ import os.path
 import bisect
 import configparser
 import subprocess
-from ObjectListView import ColumnDefn
+from ObjectListView import ColumnDefn, ListGroup
 
 
 
@@ -25,6 +25,9 @@ class MyFrame(mainWindow):
         self.lopt_inp_file = 'LOPT/ni2_lopt.inp'
         self.lopt_par_file = 'LOPT/ni2_lopt.par'
         self.lopt_fixed_file = 'LOPT/ni2_lopt.fixed'
+        self.lopt_lev_file = 'LOPT/ni2_lopt.lev'
+        self.lopt_lin_file = 'LOPT/ni2_lopt.lin'
+
         
         
         self.strans_lev_ojlv.SetColumns([
@@ -44,6 +47,18 @@ class MyFrame(mainWindow):
             ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig')])
         
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
+        
+        self.lopt_lev_ojlv.SetColumns([
+            ColumnDefn('', 'left', 0, 'transition'),
+            ColumnDefn('', 'left', 10, 'star'),
+            ColumnDefn('Fit', 'left', 30, 'tags'),
+            ColumnDefn('Intensity', 'left', 100, 'log_ew'),
+            ColumnDefn('SNR', 'left', 40, 'peak'),
+            ColumnDefn('Wn (cm-1)', 'left', 100, 'wavenumber'),
+            ColumnDefn('Unc. (cm-1)', 'left', 90, 'unc'),
+            ColumnDefn('Wn (Obs-Calc)', 'left', 100, 'dWO-C'),
+            ColumnDefn('Level', 'left', 100, 'transition'),
+            ColumnDefn('Tags', 'left', 40, 'tags')])
        
         
          
@@ -304,7 +319,62 @@ class MyFrame(mainWindow):
                              
                 fixed_strings.append(f'{level:>9}{lev_energy:>9}{lev_unc:>13}')
             
-            fixed_file.writelines(fixed_strings)        
+            fixed_file.writelines(fixed_strings)    
+            
+    def get_lopt_output(self):
+        
+        lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
+        lopt_levs = list(lopt_levs.transpose().to_dict().values())
+        lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
+        merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'L1', 'L2']], 
+                                     self.df[['wavenumber', 'peak', 'eq width', 'tags', 'unc']], 
+                                     left_on='W_obs', 
+                                     right_on='wavenumber',
+                                     tolerance=0.005,
+                                     direction='nearest') # match lopt lines to main df file based on nearest wavenumber
+        
+        merged_lines['dWO-C'] = merged_lines['W_obs'] - merged_lines['Wn_c']
+        merged_lines['star'] = np.where(merged_lines['dWO-C'].abs() > merged_lines['unc'], True, False)
+        merged_lines['log_ew'] = np.log(merged_lines['eq width'])
+        merged_lines['transition'] = ''
+        duplicated_lines = pd.DataFrame(np.repeat(merged_lines.copy().values,2,axis=0))
+        duplicated_lines.columns = merged_lines.columns  
+        
+        t1 = duplicated_lines.iloc[0::2].copy()
+        t1['transition'] = t1['L1'] 
+        t1 = duplicated_lines.iloc[1::2].copy()
+        t1['transition'] = t1['L2'] 
+        
+        duplicated_lines.update(t1)
+        duplicated_lines.update(t1)
+        
+        
+             
+        # duplicated_lines.iloc[0::2]['transition'] = duplicated_lines['L1']
+        # duplicated_lines.iloc[1::2]['transition'] = duplicated_lines['L2']
+             
+        #merged_lines = list(merged_lines.transpose().to_dict().values())
+        duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
+        #print(merged_lines)
+        #self.lopt_lev_ojlv.SetObjects(merged_lines)
+        self.lopt_lev_ojlv.SetObjects(duplicated_lines)
+        
+        
+        # y = []
+        # i = 0
+        
+        # for lev in lopt_levs:
+        #     level_lines_df = merged_lines.loc[(merged_lines['L1'] == lev['Designation']) | (merged_lines['L2'] == lev['Designation'])].copy() # only lines that have tranistions to/from level 
+        #     level_lines_df['transition'] = np.where(level_lines_df['L1'] == lev['Designation'], level_lines_df['L2'], level_lines_df['L1'] )
+        #     level_lines_df = list(level_lines_df.transpose().to_dict().values())
+        #     x = ListGroup(i, lev['Designation'])
+        #     i += 1
+        #     x.Add(level_lines_df)
+        #     y.append(x)
+        #     print(level_lines_df)
+            
+        # self.lopt_lev_ojlv.SetGroups(y)
+            
             
     
             
@@ -415,10 +485,11 @@ class MyFrame(mainWindow):
         
         self.frame_statusbar.SetStatusText('Running LOPT...')        
         p = subprocess.run(['java', '-jar', 'Lopt.jar', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-        print(p)
         rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
         tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
-        self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')        
+        self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')   
+        
+        self.get_lopt_output()
 
                 
     def on_Save(self, event):  

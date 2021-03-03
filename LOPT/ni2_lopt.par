@@ -26,6 +26,7 @@ Y       ; Divide levels into independent groups (Y/N)?
 50      ;1st column of UPPER level LABEL in the transitions-input file (width must be same as for lower level)
 65      ;1st column for LINE FLAGS (B=blend,Q=questionable,M=masked,P=predicted,A=air wavelength,V=vacuum wavelength; width=5 chars; CORRELATION GROUP No. is entered here!)
 Y       ; tab-delimited output [Y/N] ?
+N	; round input lines [Y/N]?
 ----------------------------------------------------------------------------
 Explanations
 
