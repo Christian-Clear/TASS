@@ -1,3 +1,5 @@
 1. Add dialog to ask if want to load previously open project on opening Tame. Or add this option as a preference - CvdB 
 2. If there is no .par file, then there will be nothing to read and therefore no lines can be written. Think about storing dummy file somewhere for use.
 3. Check if float precision = high is really needed on read_csv for pandas or is just eating run time up.
+4. error catching on many things:
+	a. if java not installed for lopt

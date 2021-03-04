@@ -119,7 +119,7 @@ class mainWindow(wx.Frame):
 
         sizer_7 = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.lopt_lev_ojlv = GroupListView(self.window_2_pane_1, wx.ID_ANY, style=wx.LC_REPORT|wx.SUNKEN_BORDER)
+        self.lopt_lev_ojlv = GroupListView(self.window_2_pane_1, wx.ID_ANY, style=wx.LC_REPORT|wx.SUNKEN_BORDER, showItemCounts = False)
         sizer_7.Add(self.lopt_lev_ojlv, 1, wx.EXPAND, 0)
 
         self.window_2_pane_2 = wx.Panel(self.window_2, wx.ID_ANY)

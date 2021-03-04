@@ -49,18 +49,23 @@ class MyFrame(mainWindow):
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
         self.lopt_lev_ojlv.SetColumns([
-            ColumnDefn('', 'left', 0, 'transition'),
+            ColumnDefn('Level', 'left', 100, 'main_level'),
             ColumnDefn('', 'left', 10, 'star'),
             ColumnDefn('Fit', 'left', 30, 'tags'),
-            ColumnDefn('Intensity', 'left', 100, 'log_ew'),
-            ColumnDefn('SNR', 'left', 40, 'peak'),
-            ColumnDefn('Wn (cm-1)', 'left', 100, 'wavenumber'),
-            ColumnDefn('Unc. (cm-1)', 'left', 90, 'unc'),
-            ColumnDefn('Wn (Obs-Calc)', 'left', 100, 'dWO-C'),
-            ColumnDefn('Level', 'left', 100, 'transition'),
-            ColumnDefn('Tags', 'left', 40, 'tags')])
-       
+            ColumnDefn('Intensity', 'left', 80, 'log_ew', stringConverter="%.2f"),
+            ColumnDefn('SNR', 'left', 50, 'peak', stringConverter="%d"),
+            ColumnDefn('Wn (cm-1)', 'left', 100, 'wavenumber', stringConverter="%.4f"),
+            ColumnDefn('Unc. (cm-1)', 'left', 90, 'unc', stringConverter="%.4f"),
+            ColumnDefn('Obs-Calc (cm-1)', 'left', 120, 'dWO-C', stringConverter="%.4f"),
+            ColumnDefn('Level', 'left', 100, 'other_level'),
+            ColumnDefn('Tags', 'left', 40, 'F')])
         
+        
+        self.window_2.SetSashPosition(780)
+        
+        
+
+
          
     def display_strans_levs(self):
         """Writes values from a list to the strans_lev_ojlv ObjectListView"""
@@ -143,11 +148,9 @@ class MyFrame(mainWindow):
         wavenumbers that within self.strans_wn_discrim are assigned the labels of the even and odd level."""
         
         self.frame_statusbar.SetStatusText(f'Running Strans for {element_name}')
-        
-        
+                
         strans_levs_even = [x for x in strans_levs if x['parity']==1]
         strans_levs_odd = [x for x in strans_levs if x['parity']==0]
-
         
         strans_levs_even = sorted(strans_levs_even, key=lambda x: x['j'])
         strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x['j'])
@@ -324,10 +327,11 @@ class MyFrame(mainWindow):
     def get_lopt_output(self):
         
         lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
-        lopt_levs = list(lopt_levs.transpose().to_dict().values())
+        #lopt_levs = list(lopt_levs.transpose().to_dict().values())
         lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
-        merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'L1', 'L2']], 
-                                     self.df[['wavenumber', 'peak', 'eq width', 'tags', 'unc']], 
+        print(lopt_lines_df)
+        merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'L1', 'L2', 'F']].sort_values('W_obs'), 
+                                     self.df[['wavenumber', 'peak', 'eq width', 'tags', 'unc']].sort_values('wavenumber'), 
                                      left_on='W_obs', 
                                      right_on='wavenumber',
                                      tolerance=0.005,
@@ -336,48 +340,32 @@ class MyFrame(mainWindow):
         merged_lines['dWO-C'] = merged_lines['W_obs'] - merged_lines['Wn_c']
         merged_lines['star'] = np.where(merged_lines['dWO-C'].abs() > merged_lines['unc'], True, False)
         merged_lines['log_ew'] = np.log(merged_lines['eq width'])
-        merged_lines['transition'] = ''
+        merged_lines['main_level'] = ''
+        merged_lines['other_level'] = ''
+        merged_lines['F'] = np.where(merged_lines['F'] == None, ' ', merged_lines['F'])
+        
+        
         duplicated_lines = pd.DataFrame(np.repeat(merged_lines.copy().values,2,axis=0))
         duplicated_lines.columns = merged_lines.columns  
         
+        
         t1 = duplicated_lines.iloc[0::2].copy()
-        t1['transition'] = t1['L1'] 
-        t1 = duplicated_lines.iloc[1::2].copy()
-        t1['transition'] = t1['L2'] 
+        t1['main_level'] = t1['L1']
+        t1['other_level'] = t1['L2'] 
+        t2 = duplicated_lines.iloc[1::2].copy()
+        t2['main_level'] = t2['L2'] 
+        t2['other_level'] = t2['L1'] 
         
         duplicated_lines.update(t1)
-        duplicated_lines.update(t1)
-        
-        
+        duplicated_lines.update(t2)
+            
              
         # duplicated_lines.iloc[0::2]['transition'] = duplicated_lines['L1']
         # duplicated_lines.iloc[1::2]['transition'] = duplicated_lines['L2']
              
-        #merged_lines = list(merged_lines.transpose().to_dict().values())
         duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
-        #print(merged_lines)
-        #self.lopt_lev_ojlv.SetObjects(merged_lines)
         self.lopt_lev_ojlv.SetObjects(duplicated_lines)
         
-        
-        # y = []
-        # i = 0
-        
-        # for lev in lopt_levs:
-        #     level_lines_df = merged_lines.loc[(merged_lines['L1'] == lev['Designation']) | (merged_lines['L2'] == lev['Designation'])].copy() # only lines that have tranistions to/from level 
-        #     level_lines_df['transition'] = np.where(level_lines_df['L1'] == lev['Designation'], level_lines_df['L2'], level_lines_df['L1'] )
-        #     level_lines_df = list(level_lines_df.transpose().to_dict().values())
-        #     x = ListGroup(i, lev['Designation'])
-        #     i += 1
-        #     x.Add(level_lines_df)
-        #     y.append(x)
-        #     print(level_lines_df)
-            
-        # self.lopt_lev_ojlv.SetGroups(y)
-            
-            
-    
-            
 
 
 ### Event-driven functions ###            
@@ -483,13 +471,23 @@ class MyFrame(mainWindow):
         self.write_lopt_par()
         self.write_lopt_fixed()
         
-        self.frame_statusbar.SetStatusText('Running LOPT...')        
-        p = subprocess.run(['java', '-jar', 'Lopt.jar', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-        rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
-        tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
-        self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')   
+        self.frame_statusbar.SetStatusText('Running LOPT...')    
+        try:
+            p = subprocess.run(['java', '-jar', 'Lopt.jar', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
+            rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
+            tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
+            self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
+            
+            self.get_lopt_output()
         
-        self.get_lopt_output()
+        except FileNotFoundError as fnf:
+            if 'java' in str(fnf):
+                self.frame_statusbar.SetStatusText('LOPT error') 
+                wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
+                      wx.OK | wx.ICON_EXCLAMATION)
+                
+         
+ 
 
                 
     def on_Save(self, event):  
