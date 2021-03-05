@@ -17,6 +17,8 @@ from ObjectListView import ColumnDefn, ListGroup
 class MyFrame(mainWindow):
     def __init__(self, *args, **kwds):
         mainWindow.__init__(self, *args, **kwds)
+        
+        self.cm_1 = 'cm\u207B\u00B9'
              
         self.load_main_config()
         self.load_project()  
@@ -33,38 +35,54 @@ class MyFrame(mainWindow):
         self.strans_lev_ojlv.SetColumns([
             ColumnDefn("Level", "left", 100, 'label'),
             ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f"),
-            ColumnDefn("Energy (cm-1)", "left", 120, 'energy', stringConverter="%.4f"),           
+            ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f"),           
             ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling = True)])
         
         self.strans_lines_ojlv.SetColumns([
-            ColumnDefn('Wavenumber (cm-1)', 'left', 150, 'wavenumber', stringConverter="%.4f"),
+            ColumnDefn(f'Wavenumber ({self.cm_1})', 'left', 150, 'wavenumber', stringConverter="%.4f"),
             ColumnDefn('SNR', 'left', 40, 'peak', stringConverter="%d"),
             ColumnDefn('FHWM (mK)', 'left', 90, 'width', stringConverter="%d"),
             ColumnDefn('log(Eq. Width)', 'left', 110, 'eq width', stringConverter="%.2f"),
             ColumnDefn('Fit', 'left', 30, 'tags'),
-            ColumnDefn('Unc. (cm-1)', 'left', 90, 'unc', stringConverter="%.4f"),
+            ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'unc', stringConverter="%.4f"),
             ColumnDefn('Main Element Transitions', 'left', 500, 'main_desig'),
-            ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig')])
+            ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig', isSpaceFilling = True)])
         
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
         self.lopt_lev_ojlv.SetColumns([
             ColumnDefn('Level', 'left', 100, 'main_level'),
-            ColumnDefn('', 'left', 10, 'star'),
+            ColumnDefn('', 'left', 20, 'star', stringConverter=self.star_to_asterix),
             ColumnDefn('Fit', 'left', 30, 'tags'),
-            ColumnDefn('Intensity', 'left', 80, 'log_ew', stringConverter="%.2f"),
+            ColumnDefn('Intensity', 'left', 70, 'log_ew', stringConverter="%.2f"),
             ColumnDefn('SNR', 'left', 50, 'peak', stringConverter="%d"),
-            ColumnDefn('Wn (cm-1)', 'left', 100, 'wavenumber', stringConverter="%.4f"),
-            ColumnDefn('Unc. (cm-1)', 'left', 90, 'unc', stringConverter="%.4f"),
-            ColumnDefn('Obs-Calc (cm-1)', 'left', 120, 'dWO-C', stringConverter="%.4f"),
+            ColumnDefn(f'Wn ({self.cm_1})', 'left', 100, 'wavenumber', stringConverter="%.4f"),
+            ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'unc', stringConverter="%.4f"),
+            ColumnDefn(f'Obs-Calc ({self.cm_1})', 'left', 120, 'dWO-C', stringConverter="%.4f"),
             ColumnDefn('Level', 'left', 100, 'other_level'),
-            ColumnDefn('Tags', 'left', 40, 'F')])
+            ColumnDefn('Tags', 'left', 40, 'F', isSpaceFilling = True)])
+        
+        # , stringConverter=self.correct_tags, 
         
         
         self.window_2.SetSashPosition(780)
         
         
-
+    def star_to_asterix(self, star):
+        if star:
+            return '*'
+        return ''
+        
+    def correct_tags(self, tag):
+        if tag == 'nan':
+            return ''
+        return tag#.upper()
+    
+    def neg_num_str(self, diff):
+        # if not diff[0] == '-':
+        #     return f"neg"
+        # return f"test"
+        return diff[:1]
 
          
     def display_strans_levs(self):
@@ -326,10 +344,9 @@ class MyFrame(mainWindow):
             
     def get_lopt_output(self):
         
-        lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
+        self.lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
         #lopt_levs = list(lopt_levs.transpose().to_dict().values())
         lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
-        print(lopt_lines_df)
         merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'L1', 'L2', 'F']].sort_values('W_obs'), 
                                      self.df[['wavenumber', 'peak', 'eq width', 'tags', 'unc']].sort_values('wavenumber'), 
                                      left_on='W_obs', 
@@ -366,17 +383,37 @@ class MyFrame(mainWindow):
         duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
         self.lopt_lev_ojlv.SetObjects(duplicated_lines)
         
+    def display_lopt_line(self, line):
+        line_dict = list(line.transpose().to_dict().values()).pop()
+        
+        self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
+        
+        
+        #self.lopt_line_panel.SetPosition((0,0))
+        self.lopt_level_panel.Hide()
+        self.lopt_line_panel.Show()
+        self.sizer_8.Layout()
+        
+    
+    def display_lopt_lev(self, level):
+        #self.lopt_level_panel.SetPosition((0,0))
+        self.lopt_level_panel.Show()
+        self.lopt_line_panel.Hide()
+        self.sizer_8.Layout()
+        
 
 
 ### Event-driven functions ###            
     
     def on_partial_strans(self, event):  # Run >> Strans(partial)
         self.main_strans(self.strans_levs)
+        self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
         self.frame_statusbar.SetStatusText('Strans Complete')
         
     def on_full_strans(self, event):  
         self.main_strans(self.strans_levs)
         self.other_strans(self.other_lev_list)
+        self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
         self.frame_statusbar.SetStatusText('Strans Complete')
 
             
@@ -479,6 +516,7 @@ class MyFrame(mainWindow):
             self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
             
             self.get_lopt_output()
+            self.main_panel.ChangeSelection(1)  # changes the notebook tab to LOPT
         
         except FileNotFoundError as fnf:
             if 'java' in str(fnf):
@@ -505,6 +543,26 @@ class MyFrame(mainWindow):
             self.Destroy() 
         else:
             return
+        
+        
+    def on_click_lopt_levs(self, event):  
+        try:
+            selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
+            selected_line = self.df.loc[self.df['wavenumber'] == selected_wn]           
+            
+            self.display_lopt_line(selected_line)
+
+        except TypeError: # group header selected
+            next_row = self.lopt_lev_ojlv.GetObjectAt(self.lopt_lev_ojlv.GetFocusedRow()+1)
+            
+            if not next_row == None:  # group header selected and not the blank line above it         
+                next_row_lev = next_row['main_level']
+                selected_lev = self.lopt_levs.loc[self.lopt_levs['Designation'] == next_row_lev]
+                
+                self.display_lopt_lev(selected_lev)         
+        
+            event.Skip()    
+    
             
         
 class KeyList(object):
