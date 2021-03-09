@@ -62,10 +62,12 @@ class MyFrame(mainWindow):
             ColumnDefn('Level', 'left', 100, 'other_level'),
             ColumnDefn('Tags', 'left', 40, 'F', isSpaceFilling = True)])
         
-        # , stringConverter=self.correct_tags, 
-        
-        
         self.window_2.SetSashPosition(780)
+        
+        self.lopt_line_listctrl.EnableCheckBoxes(True)
+        
+     
+        
         
         
     def star_to_asterix(self, star):
@@ -123,7 +125,7 @@ class MyFrame(mainWindow):
         self.df = pd.read_csv(lines_file, float_precision='high')  # create new dataframe from the input lines file 
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
-        self.df['user_desig'] = '' # append column of empty lists.
+        self.df['user_desig'] = np.empty((len(self.df), 0)).tolist() # append column of empty lists.
         self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
         self.save_df()
         
@@ -269,51 +271,51 @@ class MyFrame(mainWindow):
             lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()  # create list of all lines with a main designation
             
             if lines == []:  # no lines have a main_designation in self.df ie strans has not been run
-                wx.MessageBox(f'No lines found for LOPT input. Please run STRANS first', 'No Matched Lines', 
+                wx.MessageBox('No lines found for LOPT input. Please run STRANS first', 'No Matched Lines', 
                       wx.OK | wx.ICON_EXCLAMATION)
-                return
-            
-            for line in lines:
-                snr = f'{line[1]:9.0f}'
-                wn = f'{line[0]:15.4f}'
-                tag = '       '
-                main_desigs = line[6]
-                other_desigs = line[7] 
-                user_desig = line[8]
-                tags = line[9] 
-                     
-                if not user_desig == '':  # user label for line
-                    upper_level = f'{user_desig["upper_level"]:>11}'
-                    lower_level = f'{user_desig["lower_level"]:>11}'
-                    
-                    if all(value == False for value in tags.values()): # no user defined tags for the line
-                        unc = f'{line[5]:.4f}'
-                    elif tags['user_unc'] != False:
-                        unc = f"{tags['user_unc']:.4f}"
-                    else:
-                        unc = f'{self.lopt_default_unc:.4f}'
-                        tag = '       B'
-                    
-                    lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
-                    inp_file.writelines(lopt_str)
-                    
-                else:  # no user label for line
-                    if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
-                        unc = f'{self.lopt_default_unc:.4f}'
-                    elif all(value == False for value in tags.values()): # no user defined tags for the line
-                        unc = f'{line[5]:.4f}'
-                    elif tags['user_unc'] != False:
-                        unc = f"{tags['user_unc']:.4f}"
-                    else:
-                        unc = f'{self.lopt_default_unc:.4f}'
-                        tag = '       B'
+                
+            else:
+                for line in lines:
+                    snr = f'{line[1]:9.0f}'
+                    wn = f'{line[0]:15.4f}'
+                    tag = '       '
+                    main_desigs = line[6]
+                    other_desigs = line[7] 
+                    user_desig = line[8]
+                    tags = line[9] 
+                         
+                    if not user_desig == []:  # user label for line
+                        upper_level = f'{user_desig["upper_level"]:>11}'
+                        lower_level = f'{user_desig["lower_level"]:>11}'
                         
-                    for desig in main_desigs:
-                        upper_level = f'{desig["upper_level"]:>11}'
-                        lower_level = f'{desig["lower_level"]:>11}'
-                    
-                        lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
+                        if all(value == False for value in tags.values()): # no user defined tags for the line
+                            unc = f'{line[5]:.4f}'
+                        elif tags['user_unc'] != False:
+                            unc = f"{tags['user_unc']:.4f}"
+                        else:
+                            unc = f'{self.lopt_default_unc:.4f}'
+                            tag = '       B'
+                        
+                        lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
                         inp_file.writelines(lopt_str)
+                        
+                    else:  # no user label for line
+                        if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
+                            unc = f'{self.lopt_default_unc:.4f}'
+                        elif all(value == False for value in tags.values()): # no user defined tags for the line
+                            unc = f'{line[5]:.4f}'
+                        elif tags['user_unc'] != False:
+                            unc = f"{tags['user_unc']:.4f}"
+                        else:
+                            unc = f'{self.lopt_default_unc:.4f}'
+                            tag = '       B'
+                            
+                        for desig in main_desigs:
+                            upper_level = f'{desig["upper_level"]:>11}'
+                            lower_level = f'{desig["lower_level"]:>11}'
+                        
+                            lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
+                            inp_file.writelines(lopt_str)
         
         
     def write_lopt_par(self):      
@@ -388,6 +390,20 @@ class MyFrame(mainWindow):
         
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
         
+        self.lopt_line_listctrl.DeleteAllItems()
+        
+        for i, desig in enumerate(line_dict['main_desig'] + line_dict['other_desig']):
+            list_ctrl_list = [desig['element_name'], 
+                              desig['upper_level'], 
+                              desig['lower_level'],
+                              'wn_diff']
+            
+            self.lopt_line_listctrl.Append(list_ctrl_list)
+            
+            if desig == line_dict['user_desig']:
+                self.lopt_line_listctrl.CheckItem(i, True)
+            
+        
         
         #self.lopt_line_panel.SetPosition((0,0))
         self.lopt_level_panel.Hide()
@@ -403,7 +419,35 @@ class MyFrame(mainWindow):
         
 
 
-### Event-driven functions ###            
+### Event-driven functions ###     
+
+    def on_lopt_trans_checked(self, event): 
+        user_desig = {}        
+        line_index = event.GetIndex()
+        
+        user_desig['upper_level'] = self.lopt_line_listctrl.GetItem(line_index, 1).GetText()
+        user_desig['lower_level'] = self.lopt_line_listctrl.GetItem(line_index, 2).GetText()
+        user_desig['element_name'] = self.lopt_line_listctrl.GetItem(line_index, 0).GetText()        
+        
+        with wx.EventBlocker(self):  # stops the unchecked event from firing  
+            for i in range(self.lopt_line_listctrl.GetItemCount()):
+                if i != line_index:
+                    self.lopt_line_listctrl.CheckItem(i, False)
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
+        selected_line = self.df.loc[self.df['wavenumber'] == selected_wn] 
+        
+        
+        print(selected_line['user_desig'])
+        selected_line['user_desig'] = list(user_desig)
+        print(user_desig)
+        
+        # self.df.update(selected_line)
+        
+        event.Skip()
+
+    def on_lopt_trans_unchecked(self, event):  # wxGlade: mainWindow.<event_handler>
+        print("Event handler 'on_lopt_trans_unchecked' not implemented!")
+        event.Skip()      
     
     def on_partial_strans(self, event):  # Run >> Strans(partial)
         self.main_strans(self.strans_levs)
@@ -420,7 +464,7 @@ class MyFrame(mainWindow):
     def on_strans_del(self, event):  
         """Delete levels from self.strans_lev_file. This will be a permanent change."""
 
-        if wx.MessageBox(f'Are you sure you want to delete these levels? \nThis will be a permanent change.', 'Delete Levels?', 
+        if wx.MessageBox('Are you sure you want to delete these levels? \nThis will be a permanent change.', 'Delete Levels?', 
                       wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:
             print('Deleted!')
         else:
@@ -497,7 +541,7 @@ class MyFrame(mainWindow):
                 self.frame_statusbar.SetStatusText('Project loaded successfully')
                 
             except:
-                wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
+                wx.MessageBox('Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
                       wx.OK | wx.ICON_EXCLAMATION)
                 
     def on_lopt(self, event):
@@ -523,6 +567,8 @@ class MyFrame(mainWindow):
                 self.frame_statusbar.SetStatusText('LOPT error') 
                 wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
                       wx.OK | wx.ICON_EXCLAMATION)
+        except IndexError:
+            self.frame_statusbar.SetStatusText('Run STRANS first') 
                 
          
  
