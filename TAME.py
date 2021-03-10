@@ -12,6 +12,9 @@ import configparser
 import subprocess
 from ObjectListView import ColumnDefn, ListGroup
 
+import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 
 class MyFrame(mainWindow):
@@ -36,7 +39,7 @@ class MyFrame(mainWindow):
             ColumnDefn("Level", "left", 100, 'label'),
             ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f"),
             ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f"),           
-            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling = True)])
+            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True)])
         
         self.strans_lines_ojlv.SetColumns([
             ColumnDefn(f'Wavenumber ({self.cm_1})', 'left', 150, 'wavenumber', stringConverter="%.4f"),
@@ -46,7 +49,7 @@ class MyFrame(mainWindow):
             ColumnDefn('Fit', 'left', 30, 'tags'),
             ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'unc', stringConverter="%.4f"),
             ColumnDefn('Main Element Transitions', 'left', 500, 'main_desig'),
-            ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig', isSpaceFilling = True)])
+            ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig', isSpaceFilling=True)])
         
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
@@ -58,9 +61,9 @@ class MyFrame(mainWindow):
             ColumnDefn('SNR', 'left', 50, 'peak', stringConverter="%d"),
             ColumnDefn(f'Wn ({self.cm_1})', 'left', 100, 'wavenumber', stringConverter="%.4f"),
             ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'unc', stringConverter="%.4f"),
-            ColumnDefn(f'Obs-Calc ({self.cm_1})', 'left', 120, 'dWO-C', stringConverter="%.4f"),
+            ColumnDefn(f'Obs-Calc ({self.cm_1})', 'left', 120, 'dWO-C', stringConverter=self.neg_num_str),
             ColumnDefn('Level', 'left', 100, 'other_level'),
-            ColumnDefn('Tags', 'left', 40, 'F', isSpaceFilling = True)])
+            ColumnDefn('Tags', 'left', 40, 'F', stringConverter=self.correct_tags ,isSpaceFilling=True)])
         
         self.window_2.SetSashPosition(780)
         
@@ -76,15 +79,15 @@ class MyFrame(mainWindow):
         return ''
         
     def correct_tags(self, tag):
-        if tag == 'nan':
+        if str(tag) == 'nan':
             return ''
-        return tag#.upper()
+        return tag.upper()
     
     def neg_num_str(self, diff):
-        # if not diff[0] == '-':
-        #     return f"neg"
-        # return f"test"
-        return diff[:1]
+        if diff < 0.0:
+            return f'{diff:.4f}'
+        else:
+            return f' {diff:.4f}'
 
          
     def display_strans_levs(self):
@@ -125,8 +128,8 @@ class MyFrame(mainWindow):
         self.df = pd.read_csv(lines_file, float_precision='high')  # create new dataframe from the input lines file 
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
-        self.df['user_desig'] = np.empty((len(self.df), 0)).tolist() # append column of empty lists.
-        self.df['line_tags'] = [{'artifact': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
+        self.df['user_desig'] = ''
+        self.df['line_tags'] = [{'ringing': False, 'noise': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
         self.save_df()
         
     
@@ -155,7 +158,6 @@ class MyFrame(mainWindow):
         for other_lev in other_lev_list:
             element_name, level_file = other_lev.split(',')
             strans_levs = list(pd.read_csv(level_file).transpose().to_dict().values())
-            # strans_levs = np.loadtxt(level_file, dtype=str, delimiter=',', skiprows=1) 
             matched_lines = self.strans(strans_levs, desig_list, element_name)
 
         self.df.update(matched_lines)  
@@ -284,7 +286,7 @@ class MyFrame(mainWindow):
                     user_desig = line[8]
                     tags = line[9] 
                          
-                    if not user_desig == []:  # user label for line
+                    if not user_desig == '':  # user label for line
                         upper_level = f'{user_desig["upper_level"]:>11}'
                         lower_level = f'{user_desig["lower_level"]:>11}'
                         
@@ -362,12 +364,10 @@ class MyFrame(mainWindow):
         merged_lines['main_level'] = ''
         merged_lines['other_level'] = ''
         merged_lines['F'] = np.where(merged_lines['F'] == None, ' ', merged_lines['F'])
-        
-        
+                
         duplicated_lines = pd.DataFrame(np.repeat(merged_lines.copy().values,2,axis=0))
         duplicated_lines.columns = merged_lines.columns  
-        
-        
+                
         t1 = duplicated_lines.iloc[0::2].copy()
         t1['main_level'] = t1['L1']
         t1['other_level'] = t1['L2'] 
@@ -377,8 +377,7 @@ class MyFrame(mainWindow):
         
         duplicated_lines.update(t1)
         duplicated_lines.update(t2)
-            
-             
+           
         # duplicated_lines.iloc[0::2]['transition'] = duplicated_lines['L1']
         # duplicated_lines.iloc[1::2]['transition'] = duplicated_lines['L2']
              
@@ -389,7 +388,6 @@ class MyFrame(mainWindow):
         line_dict = list(line.transpose().to_dict().values()).pop()
         
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
-        
         self.lopt_line_listctrl.DeleteAllItems()
         
         for i, desig in enumerate(line_dict['main_desig'] + line_dict['other_desig']):
@@ -402,9 +400,18 @@ class MyFrame(mainWindow):
             
             if desig == line_dict['user_desig']:
                 self.lopt_line_listctrl.CheckItem(i, True)
+        
             
+        line_tags = line_dict['line_tags']        
+        self.ringing_chkbox.SetValue(line_tags['ringing'])
+        self.noise_chkbox.SetValue(line_tags['noise'])
+        self.blend_chkbox.SetValue(line_tags['blend'])
+        
+        if line_tags['user_unc']:  # if not False
+            self.user_unc_txtctrl.write(line_tags['user_unc'])
         
         
+                
         #self.lopt_line_panel.SetPosition((0,0))
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Show()
@@ -417,9 +424,63 @@ class MyFrame(mainWindow):
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
         
-
+    def update_df_cell(self, wavenumber, column, value):
+        """Updates a cell of the main self.df dataframe, specified by wavenumber and column, with value"""   
+        selected_line_index = self.df.loc[self.df['wavenumber'] == wavenumber].index.values[0]
+        self.df.at[selected_line_index, column] = value  # just updates a single value
+        print(self.df.iloc[selected_line_index])
+        
+    def get_df_cell(self, wavenumber, column):
+        selected_line_index = self.df.loc[self.df['wavenumber'] == wavenumber].index.values[0]
+        return self.df.at[selected_line_index, column]
+        
 
 ### Event-driven functions ###     
+
+    def on_ringing_tag(self, event):      
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
+        line_tags = self.get_df_cell(selected_wn, 'line_tags')
+        line_tags['ringing'] = self.ringing_chkbox.GetValue()
+        self.update_df_cell(selected_wn, 'line_tags', line_tags)
+
+
+    def on_noise_tag(self, event):  
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
+        line_tags = self.get_df_cell(selected_wn, 'line_tags')
+        line_tags['noise'] = self.noise_chkbox.GetValue()
+        self.update_df_cell(selected_wn, 'line_tags', line_tags)
+
+    def on_blend_tag(self, event):  
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
+        line_tags = self.get_df_cell(selected_wn, 'line_tags')
+        line_tags['blend'] = self.blend_chkbox.GetValue()
+        self.update_df_cell(selected_wn, 'line_tags', line_tags)
+
+    def on_user_unc_tag(self, event): 
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
+        line_tags = self.get_df_cell(selected_wn, 'line_tags')
+        
+        if self.user_unc_chkbox.GetValue():
+            user_unc = self.user_unc_txtctrl.GetLineText(0)
+            
+            if self.is_float(user_unc) and float(user_unc) < 10.0:
+                line_tags['user_unc'] = float(user_unc)
+            else:
+                wx.MessageBox('User uncertainty must be a number less than 10.0', 'Incorrect Uncertainty', 
+                      wx.OK | wx.ICON_EXCLAMATION)
+                return            
+        else:
+            line_tags['user_unc'] = False
+        
+        self.update_df_cell(selected_wn, 'line_tags', line_tags)
+
+    def is_float(self, value):
+        """Checks if a given value is a number or not"""
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
 
     def on_lopt_trans_checked(self, event): 
         user_desig = {}        
@@ -433,22 +494,14 @@ class MyFrame(mainWindow):
             for i in range(self.lopt_line_listctrl.GetItemCount()):
                 if i != line_index:
                     self.lopt_line_listctrl.CheckItem(i, False)
-        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
-        selected_line = self.df.loc[self.df['wavenumber'] == selected_wn] 
-        
-        
-        print(selected_line['user_desig'])
-        selected_line['user_desig'] = list(user_desig)
-        print(user_desig)
-        
-        # self.df.update(selected_line)
-        
-        event.Skip()
+                    
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']       
+        self.update_df_cell(selected_wn, 'user_desig', user_desig)
 
-    def on_lopt_trans_unchecked(self, event):  # wxGlade: mainWindow.<event_handler>
-        print("Event handler 'on_lopt_trans_unchecked' not implemented!")
-        event.Skip()      
-    
+    def on_lopt_trans_unchecked(self, event):
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']       
+        self.update_df_cell(selected_wn, 'user_desig', '')
+
     def on_partial_strans(self, event):  # Run >> Strans(partial)
         self.main_strans(self.strans_levs)
         self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
@@ -459,8 +512,7 @@ class MyFrame(mainWindow):
         self.other_strans(self.other_lev_list)
         self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
         self.frame_statusbar.SetStatusText('Strans Complete')
-
-            
+           
     def on_strans_del(self, event):  
         """Delete levels from self.strans_lev_file. This will be a permanent change."""
 
@@ -516,8 +568,7 @@ class MyFrame(mainWindow):
             # except:
             #     wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
             #           wx.OK | wx.ICON_EXCLAMATION)
-            
-        
+                
     def on_Open(self, event):  # File >> Open
         save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
                                  wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
@@ -569,15 +620,10 @@ class MyFrame(mainWindow):
                       wx.OK | wx.ICON_EXCLAMATION)
         except IndexError:
             self.frame_statusbar.SetStatusText('Run STRANS first') 
-                
-         
- 
-
-                
+                        
     def on_Save(self, event):  
         self.save_project()
-        self.frame_statusbar.SetStatusText('Project saved')
-                    
+        self.frame_statusbar.SetStatusText('Project saved')                   
         
     def on_Exit(self, event):  # File >> Exit
         save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
@@ -588,8 +634,7 @@ class MyFrame(mainWindow):
         elif save_dlg == wx.NO:
             self.Destroy() 
         else:
-            return
-        
+            return       
         
     def on_click_lopt_levs(self, event):  
         try:
@@ -608,6 +653,8 @@ class MyFrame(mainWindow):
                 self.display_lopt_lev(selected_lev)         
         
             event.Skip()    
+            
+    
     
             
         
