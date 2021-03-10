@@ -10,7 +10,8 @@ import os.path
 import bisect
 import configparser
 import subprocess
-from ObjectListView import ColumnDefn, ListGroup
+from ObjectListView import ColumnDefn
+from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
 
 import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -68,6 +69,16 @@ class MyFrame(mainWindow):
         self.window_2.SetSashPosition(780)
         
         self.lopt_line_listctrl.EnableCheckBoxes(True)
+        
+        self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
+        self.matplotlib_canvas.axes.set_ylabel('SNR')
+
+        self.toolbar = NavigationToolbar(self.matplotlib_canvas)
+        self.toolbar.Realize()
+        self.matplotlib_sizer.Add(self.toolbar, 0, wx.LEFT | wx.EXPAND)
+
+        # update the axes menu on the toolbar
+        self.toolbar.update()
         
      
         
@@ -387,6 +398,8 @@ class MyFrame(mainWindow):
     def display_lopt_line(self, line):
         line_dict = list(line.transpose().to_dict().values()).pop()
         
+        self.user_unc_txtctrl.SetValue('')
+        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
         self.lopt_line_listctrl.DeleteAllItems()
         
@@ -408,15 +421,26 @@ class MyFrame(mainWindow):
         self.blend_chkbox.SetValue(line_tags['blend'])
         
         if line_tags['user_unc']:  # if not False
+            self.user_unc_chkbox.SetValue(True)
             self.user_unc_txtctrl.write(line_tags['user_unc'])
+        else:
+            self.user_unc_chkbox.SetValue(False)
         
         
-                
+        x = np.arange(line_dict['wavenumber'] - 10, line_dict['wavenumber'] + 10, 0.1)
+        y = [np.sin(x) for x in x]
+    
+        self.matplotlib_canvas.clear()
+        self.matplotlib_canvas.axes.plot(x,y)
+        self.matplotlib_canvas.draw()
+        
+    
         #self.lopt_line_panel.SetPosition((0,0))
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Show()
         self.sizer_8.Layout()
-        
+     
+
     
     def display_lopt_lev(self, level):
         #self.lopt_level_panel.SetPosition((0,0))
@@ -443,7 +467,6 @@ class MyFrame(mainWindow):
         line_tags['ringing'] = self.ringing_chkbox.GetValue()
         self.update_df_cell(selected_wn, 'line_tags', line_tags)
 
-
     def on_noise_tag(self, event):  
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
         line_tags = self.get_df_cell(selected_wn, 'line_tags')
@@ -463,11 +486,13 @@ class MyFrame(mainWindow):
         if self.user_unc_chkbox.GetValue():
             user_unc = self.user_unc_txtctrl.GetLineText(0)
             
-            if self.is_float(user_unc) and float(user_unc) < 10.0:
+            if self.is_float(user_unc) and float(user_unc) > 0.0 and float(user_unc) < 10.0:
                 line_tags['user_unc'] = float(user_unc)
             else:
-                wx.MessageBox('User uncertainty must be a number less than 10.0', 'Incorrect Uncertainty', 
+                wx.MessageBox('User uncertainty must be a number between 0.0 and 9.9999', 'Incorrect Uncertainty', 
                       wx.OK | wx.ICON_EXCLAMATION)
+                self.user_unc_chkbox.SetValue(False)
+                self.user_unc_txtctrl.SetValue('')
                 return            
         else:
             line_tags['user_unc'] = False
