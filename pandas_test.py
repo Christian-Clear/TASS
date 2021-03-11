@@ -7,6 +7,7 @@ Created on Fri Feb 12 15:49:01 2021
 """
 
 import numpy as np
+import glob
 import pandas as pd
 import bisect
 from ObjectListView import ObjectListView, ColumnDefn, ListGroup
@@ -129,26 +130,49 @@ df = pd.read_pickle('panda_test_2.pkl')
 # print(df.tail())
 #print(desig_list)
 
-df2 = pd.read_csv('LOPT/ni2_lopt.lev', delimiter='\t')
-df3 = pd.read_csv('LOPT/ni2_lopt.lin', delimiter='\t')
-df2 = list(df2.transpose().to_dict().values()) 
-#df3 = list(df3.transpose().to_dict().values()) 
+# df2 = pd.read_csv('LOPT/ni2_lopt.lev', delimiter='\t')
+# df3 = pd.read_csv('LOPT/ni2_lopt.lin', delimiter='\t')
+# df2 = list(df2.transpose().to_dict().values()) 
+# #df3 = list(df3.transpose().to_dict().values()) 
 
-#print(df3['W_obs'])
+# #print(df3['W_obs'])
 
+# # for lev in df2:
+# #     label = lev['Designation']
+# #     df4 = df3.loc[(df3['L1'] == lev['Designation']) | (df3['L2'] == lev['Designation'])]
+# #     df5 = pd.merge(df, df4, left_on='wavenumber', right_on='W_obs')
 # for lev in df2:
-#     label = lev['Designation']
 #     df4 = df3.loc[(df3['L1'] == lev['Designation']) | (df3['L2'] == lev['Designation'])]
-#     df5 = pd.merge(df, df4, left_on='wavenumber', right_on='W_obs')
-for lev in df2:
-    df4 = df3.loc[(df3['L1'] == lev['Designation']) | (df3['L2'] == lev['Designation'])]
-    merged = pd.merge_asof(df4, df, left_on='W_obs', right_on='wavenumber', 
-                   tolerance=0.005, direction='nearest')[['W_obs','wavenumber', 'L1', 'L2']]
-    x = ListGroup(lev['Designation'], merged)
-    # print(x)
-    # print(lev['Designation'], merged)
+#     merged = pd.merge_asof(df4, df, left_on='W_obs', right_on='wavenumber', 
+#                    tolerance=0.005, direction='nearest')[['W_obs','wavenumber', 'L1', 'L2']]
+#     x = ListGroup(lev['Designation'], merged)
+#     # print(x)
+#     # print(lev['Designation'], merged)
     
-print(df.columns)
+# print(df.columns)
+
+
+import matplotlib.pyplot as plt
+
+
+file = 'NiHeAH.asc'
+path='/home/christian/Desktop/TASS'
+
+# big_frame = pd.read_csv(file, skiprows=4, delim_whitespace=True, names=['wavenumber', 'snr'])#, names=['wavenumber', 'snr'])
+
+df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
+
+ax = plt.gca()
+
+df_part = df.loc[(df['wavenumber'] < 4500.) & (df['wavenumber'] > 4000.)]
+
+
+df_part.plot(kind='line',x='wavenumber',y='NiHeAH',ax=ax)
+df_part.plot(kind='line',x='wavenumber',y='NiHeBH', color='red', ax=ax)
+
+plt.show()
+
+# print(big_frame.loc[big_frame['wavenumber'] < 5000.])
 
     
     

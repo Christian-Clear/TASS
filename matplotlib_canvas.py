@@ -20,3 +20,6 @@ class MatplotlibCanvas(FigureCanvas):
     def clear(self):
         self.axes.clear()
         self.draw()
+        
+    def gca(self):
+        return self.axes

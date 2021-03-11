@@ -12,6 +12,12 @@ import configparser
 import subprocess
 from ObjectListView import ColumnDefn
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
+import glob
+import matplotlib.pyplot as plt
+
+
+
+
 
 import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -25,7 +31,7 @@ class MyFrame(mainWindow):
         self.cm_1 = 'cm\u207B\u00B9'
              
         self.load_main_config()
-        self.load_project()  
+        self.load_project() 
         #print(self.df.head())
         self.lopt_fixed_levels = ['d9  2D2']
         self.lopt_inp_file = 'LOPT/ni2_lopt.inp'
@@ -69,19 +75,19 @@ class MyFrame(mainWindow):
         self.window_2.SetSashPosition(780)
         
         self.lopt_line_listctrl.EnableCheckBoxes(True)
-        
-        self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
-        self.matplotlib_canvas.axes.set_ylabel('SNR')
 
         self.toolbar = NavigationToolbar(self.matplotlib_canvas)
         self.toolbar.Realize()
-        self.matplotlib_sizer.Add(self.toolbar, 0, wx.LEFT | wx.EXPAND)
-
-        # update the axes menu on the toolbar
+        self.matplotlib_sizer.Add(self.toolbar, 0, wx.ALIGN_CENTRE, border=5)
         self.toolbar.update()
         
-     
+        self.lopt_level_panel.Hide()
+        self.lopt_line_panel.Show()
+        self.sizer_8.Layout()
         
+        # self.lopt_line_comments_txtctrl.SetDefaultStyle(wx.TextAttr(wx.NullColour, wx.WHITE))
+        
+
         
         
     def star_to_asterix(self, star):
@@ -99,6 +105,17 @@ class MyFrame(mainWindow):
             return f'{diff:.4f}'
         else:
             return f' {diff:.4f}'
+        
+    def load_plot_df(self):
+        """Loads or creates the matplotlib data from Xgremlin ascii linelist files - maybe better as part of the wizard?"""
+        file = f'{self.project_title}_plot.pkl'
+        path='/home/christian/Desktop/TASS'
+
+        if not os.path.isfile(file):  # if no existing DataFrame is present
+            self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
+            self.plot_df.to_pickle(file) 
+            
+        self.plot_df = pd.read_pickle(file) 
 
          
     def display_strans_levs(self):
@@ -141,6 +158,7 @@ class MyFrame(mainWindow):
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['user_desig'] = ''
         self.df['line_tags'] = [{'ringing': False, 'noise': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
+        self.df['comments'] = ''
         self.save_df()
         
     
@@ -261,7 +279,8 @@ class MyFrame(mainWindow):
     def load_project(self):
         """Set all filenames and variables and load/reload all listctrls."""
         self.load_project_config()
-        self.load_df()             
+        self.load_df()  
+        self.load_plot_df()           
         self.strans_levs = list(pd.read_csv(self.strans_lev_file).transpose().to_dict().values())                 
         self.display_strans_levs() 
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
@@ -398,9 +417,11 @@ class MyFrame(mainWindow):
     def display_lopt_line(self, line):
         line_dict = list(line.transpose().to_dict().values()).pop()
         
-        self.user_unc_txtctrl.SetValue('')
+        self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected
         
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
+        
+        ### Get all designations and update the desig listctrl ###
         self.lopt_line_listctrl.DeleteAllItems()
         
         for i, desig in enumerate(line_dict['main_desig'] + line_dict['other_desig']):
@@ -414,7 +435,7 @@ class MyFrame(mainWindow):
             if desig == line_dict['user_desig']:
                 self.lopt_line_listctrl.CheckItem(i, True)
         
-            
+        ### Update the checkboxes ###   
         line_tags = line_dict['line_tags']        
         self.ringing_chkbox.SetValue(line_tags['ringing'])
         self.noise_chkbox.SetValue(line_tags['noise'])
@@ -425,22 +446,40 @@ class MyFrame(mainWindow):
             self.user_unc_txtctrl.write(line_tags['user_unc'])
         else:
             self.user_unc_chkbox.SetValue(False)
+            
+        self.lopt_line_comments_txtctrl.SetValue(line_dict['comments'])  
         
-        
-        x = np.arange(line_dict['wavenumber'] - 10, line_dict['wavenumber'] + 10, 0.1)
-        y = [np.sin(x) for x in x]
-    
-        self.matplotlib_canvas.clear()
-        self.matplotlib_canvas.axes.plot(x,y)
-        self.matplotlib_canvas.draw()
-        
+        ### Plot spectra ###        
+        self.plot_lopt_line(line_dict['wavenumber'], line_dict['peak'], line_dict['width'])
     
         #self.lopt_line_panel.SetPosition((0,0))
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Show()
         self.sizer_8.Layout()
      
+    def plot_lopt_line(self, wavenumber, peak, width):   
+        """Plots the spectra from self.plot_df to the matplotlib plot. There are scaling factors that can be changed to show
+        more/less of the plot area."""
+        plot_width = 1.
+        plot_y_scale = 1.1
+        plot_x_scale = 5.
+        
+        self.matplotlib_canvas.clear()  
+        ax = self.matplotlib_canvas.gca()        
+        df_part = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width) & (self.plot_df['wavenumber'] > wavenumber-plot_width)]
+        spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
+        
+        for spectra in spectras:
+            df_part.plot(kind='line', x='wavenumber', y=spectra, ax=ax)
+            
+        self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
+        self.matplotlib_canvas.axes.set_ylabel('SNR')
+        ax.ticklabel_format(useOffset=False)
+        ax.set_ylim([df_part.min().min()*plot_y_scale, peak*plot_y_scale])
+        ax.set_xlim([wavenumber - (width/1000)*plot_x_scale, wavenumber + (width/1000)*plot_x_scale])
+        # ax.axvline(x=wavenumber)  # due to calibration this is not in the right place and looks odd
 
+        self.matplotlib_canvas.draw()     
     
     def display_lopt_lev(self, level):
         #self.lopt_level_panel.SetPosition((0,0))
@@ -459,7 +498,12 @@ class MyFrame(mainWindow):
         return self.df.at[selected_line_index, column]
         
 
-### Event-driven functions ###     
+### Event-driven functions ###  
+
+    def on_lopt_comments(self, event):
+        text = self.lopt_line_comments_txtctrl.GetValue()
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
+        self.update_df_cell(selected_wn, 'comments', text)
 
     def on_ringing_tag(self, event):      
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
@@ -697,7 +741,7 @@ class KeyList(object):
 class MyApp(wx.App):
     def OnInit(self):
         self.frame = MyFrame(None, wx.ID_ANY, "")
-        self.SetTopWindow(self.frame)
+        # self.SetTopWindow(self.frame)
         self.frame.Show()
         return True
 
