@@ -33,6 +33,7 @@ class MyFrame(mainWindow):
         self.lopt_fixed_file = 'LOPT/ni2_lopt.fixed'
         self.lopt_lev_file = 'LOPT/ni2_lopt.lev'
         self.lopt_lin_file = 'LOPT/ni2_lopt.lin'
+        self.star_discrim = 1.5
 
         
         
@@ -55,7 +56,7 @@ class MyFrame(mainWindow):
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
         self.lopt_lev_ojlv.SetColumns([
-            ColumnDefn('Level', 'left', 100, 'main_level', groupKeyConverter=self.loptGroupKeyConverter),
+            ColumnDefn(f'Level ({self.cm_1})', 'left', 100, 'main_level', stringConverter="%.4f", groupKeyConverter=self.loptGroupKeyConverter),
             ColumnDefn('', 'left', 20, 'star', stringConverter=self.star_to_asterix),
             ColumnDefn('Fit', 'left', 30, 'tags'),
             ColumnDefn('Intensity', 'left', 70, 'log_ew', stringConverter="%.2f"),
@@ -81,7 +82,7 @@ class MyFrame(mainWindow):
         self.toolbar.update()
         
         self.lopt_level_panel.Hide()
-        self.lopt_line_panel.Show()
+        self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
         
         # self.lopt_line_comments_txtctrl.SetDefaultStyle(wx.TextAttr(wx.NullColour, wx.WHITE))
@@ -380,7 +381,7 @@ class MyFrame(mainWindow):
     def get_lopt_output(self):
         
         self.lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
-        print(self.lopt_levs.head)
+        # print(self.lopt_levs.head)
         #lopt_levs = list(lopt_levs.transpose().to_dict().values())
         lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
         # print(lopt_lines_df.columns)
@@ -392,7 +393,7 @@ class MyFrame(mainWindow):
                                      direction='nearest') # match lopt lines to main df file based on nearest wavenumber
         
         merged_lines['dWO-C'] = merged_lines['W_obs'] - merged_lines['Wn_c']
-        merged_lines['star'] = np.where(merged_lines['dWO-C'].abs() > merged_lines['uncW_o'], True, False)
+        merged_lines['star'] = np.where(((merged_lines['dWO-C'].abs()*self.star_discrim) > merged_lines['uncW_o']), True, False)
         merged_lines['log_ew'] = np.log(merged_lines['eq width'])
         merged_lines['main_level'] = ''
         merged_lines['other_level'] = ''
@@ -422,15 +423,13 @@ class MyFrame(mainWindow):
         # duplicated_lines.iloc[1::2]['transition'] = duplicated_lines['L2']
              
         duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
-        print(duplicated_lines)
-        self.lopt_lev_ojlv.SetObjects(duplicated_lines)      
+        # print(duplicated_lines)
+        self.lopt_lev_ojlv.SetObjects(duplicated_lines)  
 
         
     def display_lopt_line(self, line):
-        line_dict = list(line.transpose().to_dict().values()).pop()
-        
-        self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected
-        
+        line_dict = list(line.transpose().to_dict().values()).pop()        
+        self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
         
         ### Get all designations and update the desig listctrl ###
@@ -495,7 +494,14 @@ class MyFrame(mainWindow):
         self.matplotlib_canvas.draw()     
     
     def display_lopt_lev(self, level):
-        #self.lopt_level_panel.SetPosition((0,0))
+        lev_dict = list(level.transpose().to_dict().values()).pop() 
+        
+        self.lopt_lev_panel_header.SetLabel(f"Level: {lev_dict['Designation']}")
+        
+        
+        
+        
+        
         self.lopt_level_panel.Show()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
@@ -509,6 +515,19 @@ class MyFrame(mainWindow):
     def get_df_cell(self, wavenumber, column):
         selected_line_index = self.df.loc[self.df['wavenumber'] == wavenumber].index.values[0]
         return self.df.at[selected_line_index, column]
+    
+
+    def search_listview(self, event, listview):
+        """Searches the primary column of the listview with the string typed into the search ctrl. If the entered
+        text is not found, the serachctrl background turns red."""
+        search_bar = event.GetEventObject()
+        search_str = search_bar.GetValue()         
+
+        if not listview._FindByTyping(listview.GetPrimaryColumn(), search_str):
+            search_bar.SetBackgroundColour(wx.RED)
+        else:
+            search_bar.SetBackgroundColour(wx.WHITE)
+        
         
 
 ### Event-driven functions ###  
@@ -725,12 +744,13 @@ class MyFrame(mainWindow):
             
             self.display_lopt_line(selected_line)
 
-        except TypeError: # group header selected
+        except TypeError: # group header or blank row selected
             next_row = self.lopt_lev_ojlv.GetObjectAt(self.lopt_lev_ojlv.GetFocusedRow()+1)
             
             if not next_row == None:  # group header selected and not the blank line above it         
                 next_row_lev = next_row['main_level']
-                selected_lev = self.lopt_levs.loc[self.lopt_levs['Designation'] == next_row_lev]
+                # print(next_row_lev)
+                selected_lev = self.lopt_levs.loc[self.lopt_levs['Energy'] == next_row_lev]
                 
                 self.display_lopt_lev(selected_lev)         
         
@@ -744,6 +764,20 @@ class MyFrame(mainWindow):
         #self.lopt_lev_ojlv.SortBy(1)
         # self.lopt_lev_ojlv.RebuildGroups()
         event.Skip()
+        
+    def on_strans_lev_search(self, event):
+        self.search_listview(event, self.strans_lev_ojlv)
+        
+    def on_strans_line_search(self, event):  
+
+        try:
+            self.search_listview(event, self.strans_lines_ojlv)
+        except:
+            event.GetEventObject().Clear()
+            event.GetEventObject().SetBackgroundColour(wx.RED)
+            
+            
+        
         
     
             
