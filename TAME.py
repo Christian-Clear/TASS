@@ -13,15 +13,9 @@ import subprocess
 from ObjectListView import ColumnDefn
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
 import glob
-import matplotlib.pyplot as plt
-
-
-
-
 
 import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 
 
 class MyFrame(mainWindow):
@@ -61,18 +55,23 @@ class MyFrame(mainWindow):
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
         self.lopt_lev_ojlv.SetColumns([
-            ColumnDefn('Level', 'left', 100, 'main_level'),
+            ColumnDefn('Level', 'left', 100, 'main_level', groupKeyConverter=self.loptGroupKeyConverter),
             ColumnDefn('', 'left', 20, 'star', stringConverter=self.star_to_asterix),
             ColumnDefn('Fit', 'left', 30, 'tags'),
             ColumnDefn('Intensity', 'left', 70, 'log_ew', stringConverter="%.2f"),
             ColumnDefn('SNR', 'left', 50, 'peak', stringConverter="%d"),
             ColumnDefn(f'Wn ({self.cm_1})', 'left', 100, 'wavenumber', stringConverter="%.4f"),
-            ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'unc', stringConverter="%.4f"),
+            ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'uncW_o', stringConverter="%.4f"),
             ColumnDefn(f'Obs-Calc ({self.cm_1})', 'left', 120, 'dWO-C', stringConverter=self.neg_num_str),
             ColumnDefn('Level', 'left', 100, 'other_level'),
             ColumnDefn('Tags', 'left', 40, 'F', stringConverter=self.correct_tags ,isSpaceFilling=True)])
         
+        self.lopt_lev_ojlv.SetEmptyListMsg("Run LOPT first")
+        self.lopt_lev_ojlv.SetShowItemCounts(False)
+        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)
+        
         self.window_2.SetSashPosition(780)
+        self.window_1.SetSashPosition(380)
         
         self.lopt_line_listctrl.EnableCheckBoxes(True)
 
@@ -88,7 +87,9 @@ class MyFrame(mainWindow):
         # self.lopt_line_comments_txtctrl.SetDefaultStyle(wx.TextAttr(wx.NullColour, wx.WHITE))
         
 
-        
+    def loptGroupKeyConverter(self, energy):
+        selected_line_index = self.lopt_levs.loc[self.lopt_levs['Energy'] == energy].index.values[0]
+        return self.lopt_levs.at[selected_line_index, 'Designation']
         
     def star_to_asterix(self, star):
         if star:
@@ -301,7 +302,7 @@ class MyFrame(mainWindow):
     def write_lopt_inp(self):
         with open(self.lopt_inp_file, 'w') as inp_file:
             lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()  # create list of all lines with a main designation
-            
+
             if lines == []:  # no lines have a main_designation in self.df ie strans has not been run
                 wx.MessageBox('No lines found for LOPT input. Please run STRANS first', 'No Matched Lines', 
                       wx.OK | wx.ICON_EXCLAMATION)
@@ -316,7 +317,7 @@ class MyFrame(mainWindow):
                     user_desig = line[8]
                     tags = line[9] 
                          
-                    if not user_desig == '':  # user label for line
+                    if user_desig != '':  # user label for line
                         upper_level = f'{user_desig["upper_level"]:>11}'
                         lower_level = f'{user_desig["lower_level"]:>11}'
                         
@@ -379,17 +380,19 @@ class MyFrame(mainWindow):
     def get_lopt_output(self):
         
         self.lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
+        print(self.lopt_levs.head)
         #lopt_levs = list(lopt_levs.transpose().to_dict().values())
         lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
-        merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'L1', 'L2', 'F']].sort_values('W_obs'), 
-                                     self.df[['wavenumber', 'peak', 'eq width', 'tags', 'unc']].sort_values('wavenumber'), 
+        # print(lopt_lines_df.columns)
+        merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'E1', 'E2', 'L1', 'L2', 'F', 'uncW_o']].sort_values('W_obs'), 
+                                     self.df[['wavenumber', 'peak', 'eq width', 'tags']].sort_values('wavenumber'), 
                                      left_on='W_obs', 
                                      right_on='wavenumber',
                                      tolerance=0.005,
                                      direction='nearest') # match lopt lines to main df file based on nearest wavenumber
         
         merged_lines['dWO-C'] = merged_lines['W_obs'] - merged_lines['Wn_c']
-        merged_lines['star'] = np.where(merged_lines['dWO-C'].abs() > merged_lines['unc'], True, False)
+        merged_lines['star'] = np.where(merged_lines['dWO-C'].abs() > merged_lines['uncW_o'], True, False)
         merged_lines['log_ew'] = np.log(merged_lines['eq width'])
         merged_lines['main_level'] = ''
         merged_lines['other_level'] = ''
@@ -399,11 +402,18 @@ class MyFrame(mainWindow):
         duplicated_lines.columns = merged_lines.columns  
                 
         t1 = duplicated_lines.iloc[0::2].copy()
-        t1['main_level'] = t1['L1']
+        t1['main_level'] = t1['E1']
         t1['other_level'] = t1['L2'] 
         t2 = duplicated_lines.iloc[1::2].copy()
-        t2['main_level'] = t2['L2'] 
+        t2['main_level'] = t2['E2'] 
         t2['other_level'] = t2['L1'] 
+        
+        # t1 = duplicated_lines.iloc[0::2].copy()
+        # t1['main_level'] = t1['L1']
+        # t1['other_level'] = t1['L2'] 
+        # t2 = duplicated_lines.iloc[1::2].copy()
+        # t2['main_level'] = t2['L2'] 
+        # t2['other_level'] = t2['L1'] 
         
         duplicated_lines.update(t1)
         duplicated_lines.update(t2)
@@ -412,7 +422,9 @@ class MyFrame(mainWindow):
         # duplicated_lines.iloc[1::2]['transition'] = duplicated_lines['L2']
              
         duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
-        self.lopt_lev_ojlv.SetObjects(duplicated_lines)
+        print(duplicated_lines)
+        self.lopt_lev_ojlv.SetObjects(duplicated_lines)      
+
         
     def display_lopt_line(self, line):
         line_dict = list(line.transpose().to_dict().values()).pop()
@@ -441,11 +453,12 @@ class MyFrame(mainWindow):
         self.noise_chkbox.SetValue(line_tags['noise'])
         self.blend_chkbox.SetValue(line_tags['blend'])
         
-        if line_tags['user_unc']:  # if not False
+        if line_tags['user_unc'] != False:  # if not False
             self.user_unc_chkbox.SetValue(True)
-            self.user_unc_txtctrl.write(line_tags['user_unc'])
+            self.user_unc_txtctrl.SetValue(str(line_tags['user_unc']))
         else:
             self.user_unc_chkbox.SetValue(False)
+            self.user_unc_txtctrl.SetValue('')
             
         self.lopt_line_comments_txtctrl.SetValue(line_dict['comments'])  
         
@@ -723,7 +736,15 @@ class MyFrame(mainWindow):
         
             event.Skip()    
             
-    
+    def on_strans_save(self, event):  # wxGlade: mainWindow.<event_handler>
+        print(self.window_1.GetSashPosition())
+        event.Skip()   
+        
+    def on_col_clicked(self, event):  # wxGlade: mainWindow.<event_handler>
+        #self.lopt_lev_ojlv.SortBy(1)
+        # self.lopt_lev_ojlv.RebuildGroups()
+        event.Skip()
+        
     
             
         
