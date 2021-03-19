@@ -116,8 +116,11 @@ class MyFrame(mainWindow):
         if not os.path.isfile(file):  # if no existing DataFrame is present
             self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
             self.plot_df.to_pickle(file) 
-            
-        self.plot_df = pd.read_pickle(file) 
+        else:
+            self.plot_df = pd.read_pickle(file) 
+        
+        # self.plot_df.sort_values(by=['wavenumber'], ascending=True, inplace=True)
+        # self.plot_df.set_index('wavenumber', inplace=True, drop=True)
 
          
     def display_strans_levs(self):
@@ -379,7 +382,6 @@ class MyFrame(mainWindow):
             fixed_file.writelines(fixed_strings)    
             
     def get_lopt_output(self):
-        
         self.lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
         # print(self.lopt_levs.head)
         #lopt_levs = list(lopt_levs.transpose().to_dict().values())
@@ -427,7 +429,7 @@ class MyFrame(mainWindow):
         self.lopt_lev_ojlv.SetObjects(duplicated_lines)  
 
         
-    def display_lopt_line(self, line):
+    def display_lopt_line(self, line):        
         line_dict = list(line.transpose().to_dict().values()).pop()        
         self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
@@ -473,12 +475,17 @@ class MyFrame(mainWindow):
         """Plots the spectra from self.plot_df to the matplotlib plot. There are scaling factors that can be changed to show
         more/less of the plot area."""
         plot_width = 1.
-        plot_y_scale = 1.1
+        # plot_y_scale = 1.1
         plot_x_scale = 5.
         
         self.matplotlib_canvas.clear()  
-        ax = self.matplotlib_canvas.gca()        
-        df_part = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width) & (self.plot_df['wavenumber'] > wavenumber-plot_width)]
+        ax = self.matplotlib_canvas.gca()   
+        # df_part = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width) & (self.plot_df['wavenumber'] > wavenumber-plot_width)]
+        #Test to see if below or above is faster
+        df_part_1 = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width)]
+        df_part = df_part_1.loc[(df_part_1['wavenumber'] > wavenumber-plot_width)]
+        
+        
         spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
         
         for spectra in spectras:
@@ -487,21 +494,23 @@ class MyFrame(mainWindow):
         self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
         self.matplotlib_canvas.axes.set_ylabel('SNR')
         ax.ticklabel_format(useOffset=False)
-        ax.set_ylim([df_part.min().min()*plot_y_scale, peak*plot_y_scale])
+        # ax.set_ylim([df_part.min().min()*plot_y_scale, peak*plot_y_scale])
         ax.set_xlim([wavenumber - (width/1000)*plot_x_scale, wavenumber + (width/1000)*plot_x_scale])
         # ax.axvline(x=wavenumber)  # due to calibration this is not in the right place and looks odd
 
         self.matplotlib_canvas.draw()     
     
     def display_lopt_lev(self, level):
-        lev_dict = list(level.transpose().to_dict().values()).pop() 
-        
+        lev_dict = list(level.transpose().to_dict().values()).pop()         
         self.lopt_lev_panel_header.SetLabel(f"Level: {lev_dict['Designation']}")
-        
-        
-        
-        
-        
+        self.lopt_level_listctrl.DeleteAllItems()
+        lopt_level_list = [f"   {lev_dict['Energy']:.4f}",
+                           lev_dict['D1'],
+                           lev_dict['D2'],
+                           lev_dict['D3'],
+                           lev_dict['N_lines'],
+                           lev_dict['Comments']]        
+        self.lopt_level_listctrl.Append(lopt_level_list)     
         self.lopt_level_panel.Show()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
@@ -740,7 +749,7 @@ class MyFrame(mainWindow):
     def on_click_lopt_levs(self, event):  
         try:
             selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
-            selected_line = self.df.loc[self.df['wavenumber'] == selected_wn]           
+            selected_line = self.df.loc[self.df['wavenumber'] == selected_wn]  
             
             self.display_lopt_line(selected_line)
 
