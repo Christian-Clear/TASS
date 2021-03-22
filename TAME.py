@@ -55,8 +55,10 @@ class MyFrame(mainWindow):
         
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
+        
+        self.group_column = ColumnDefn(f'Level ({self.cm_1})', 'left', 100, 'main_level', stringConverter="%.4f", groupKeyConverter=self.loptGroupKeyConverter)       
         self.lopt_lev_ojlv.SetColumns([
-            ColumnDefn(f'Level ({self.cm_1})', 'left', 100, 'main_level', stringConverter="%.4f", groupKeyConverter=self.loptGroupKeyConverter),
+            self.group_column,
             ColumnDefn('', 'left', 20, 'star', stringConverter=self.star_to_asterix),
             ColumnDefn('Fit', 'left', 30, 'tags'),
             ColumnDefn('Intensity', 'left', 70, 'log_ew', stringConverter="%.2f"),
@@ -84,6 +86,8 @@ class MyFrame(mainWindow):
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
+        
+        
         
         # self.lopt_line_comments_txtctrl.SetDefaultStyle(wx.TextAttr(wx.NullColour, wx.WHITE))
         
@@ -426,7 +430,25 @@ class MyFrame(mainWindow):
              
         duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
         # print(duplicated_lines)
-        self.lopt_lev_ojlv.SetObjects(duplicated_lines)  
+        self.lopt_lev_ojlv.SetObjects(duplicated_lines) 
+        
+        self.load_lopt_lev_comments()  # needs to be done properly
+        
+        
+    def load_lopt_lev_comments(self):
+        self.lopt_lev_comments_file = 'lopt_lev.pkl'
+        if not os.path.isfile(self.lopt_lev_comments_file):  # if no existing DataFrame is present
+            self.lopt_lev_comments = self.lopt_levs[['Designation']].copy()
+            self.lopt_lev_comments['Comments'] = ''        
+            self.lopt_lev_comments.to_pickle(self.lopt_lev_comments_file) 
+        else:
+            lopt_lev_com_tmp = self.lopt_levs[['Designation']].copy()
+            lopt_lev_com_tmp['Comments'] = ''  
+            self.lopt_lev_comments = pd.read_pickle(self.lopt_lev_comments_file) 
+            self.lopt_lev_comments.combine_first(lopt_lev_com_tmp)  # should combine the two dataframes and keep the values from lopt_lev_comments
+            
+        
+        
 
         
     def display_lopt_line(self, line):        
@@ -461,7 +483,8 @@ class MyFrame(mainWindow):
             self.user_unc_chkbox.SetValue(False)
             self.user_unc_txtctrl.SetValue('')
             
-        self.lopt_line_comments_txtctrl.SetValue(line_dict['comments'])  
+        with wx.EventBlocker(self):  # prevents the textctrl event from firing and writing this value to the df
+            self.lopt_line_comments_txtctrl.SetValue(line_dict['comments'])  
         
         ### Plot spectra ###        
         self.plot_lopt_line(line_dict['wavenumber'], line_dict['peak'], line_dict['width'])
@@ -504,13 +527,28 @@ class MyFrame(mainWindow):
         lev_dict = list(level.transpose().to_dict().values()).pop()         
         self.lopt_lev_panel_header.SetLabel(f"Level: {lev_dict['Designation']}")
         self.lopt_level_listctrl.DeleteAllItems()
+        
+        if lev_dict['Comments'] is np.nan:
+            lopt_comments = ''
+        else:
+            lopt_comments = lev_dict['Comments']
+        
         lopt_level_list = [f"   {lev_dict['Energy']:.4f}",
                            lev_dict['D1'],
                            lev_dict['D2'],
                            lev_dict['D3'],
                            lev_dict['N_lines'],
-                           lev_dict['Comments']]        
-        self.lopt_level_listctrl.Append(lopt_level_list)     
+                           lopt_comments]        
+        self.lopt_level_listctrl.Append(lopt_level_list)   
+         
+        next_row = self.lopt_lev_ojlv.GetObjectAt(self.lopt_lev_ojlv.GetFocusedRow()+1)  # gives the first line row in the group      
+        selected_lev = self.group_column.GetGroupKeyAsString(self.group_column.GetGroupKey(next_row))  # gives the group title of the selected level, i.e. the level designation
+        self.selected_lev_index = self.lopt_lev_comments.loc[self.lopt_lev_comments['Designation'] == selected_lev].index.values[0]  # get index of the level     
+        
+        with wx.EventBlocker(self):  # prevents the textctrl event from firing and writing this value to the df
+            self.lopt_level_comments.SetValue(self.lopt_lev_comments.at[self.selected_lev_index, 'Comments']) 
+
+        
         self.lopt_level_panel.Show()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
@@ -536,12 +574,24 @@ class MyFrame(mainWindow):
             search_bar.SetBackgroundColour(wx.RED)
         else:
             search_bar.SetBackgroundColour(wx.WHITE)
+            
+    def is_float(self, value):
+        """Checks if a given value is a number or not"""
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
         
         
 
 ### Event-driven functions ###  
 
-    def on_lopt_comments(self, event):
+    def on_lopt_lev_comments(self, event):
+        text = self.lopt_level_comments.GetValue()   
+        self.lopt_lev_comments.at[self.selected_lev_index, 'Comments'] = text  # updates level with the comments
+
+    def on_lopt_line_comments(self, event):
         text = self.lopt_line_comments_txtctrl.GetValue()
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
         self.update_df_cell(selected_wn, 'comments', text)
@@ -584,13 +634,6 @@ class MyFrame(mainWindow):
         
         self.update_df_cell(selected_wn, 'line_tags', line_tags)
 
-    def is_float(self, value):
-        """Checks if a given value is a number or not"""
-        try:
-            float(value)
-            return True
-        except ValueError:
-            return False
 
     def on_lopt_trans_checked(self, event): 
         user_desig = {}        
@@ -625,13 +668,31 @@ class MyFrame(mainWindow):
            
     def on_strans_del(self, event):  
         """Delete levels from self.strans_lev_file. This will be a permanent change."""
-
-        if wx.MessageBox('Are you sure you want to delete these levels? \nThis will be a permanent change.', 'Delete Levels?', 
-                      wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:
-            print('Deleted!')
-        else:
-            return
+        selected_levs = self.strans_lev_ojlv.GetSelectedObjects()
         
+        if selected_levs:  # if selection not empty
+            if wx.MessageBox('Are you sure you want to delete these levels? \nThis will be a permanent change.', 'Delete Levels?', 
+                          wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:
+                
+    
+                self.strans_levs = [x for x in self.strans_levs if x not in selected_levs]            
+                self.display_strans_levs()
+                
+                # XXX will need to add a corresponding part in save to write these values back out to the strans file.               
+            else:
+                return
+            
+    def on_strans_add(self, event):  
+        selected_lev = self.strans_lev_ojlv.GetSelectedObject()
+        selected_lev_index = self.strans_lev_ojlv.GetIndexOf(selected_lev)
+        
+        self.PopupMenu(PopMenu(self.strans_lev_ojlv))
+        
+        self.strans_lev_ojlv.DeselectAll()
+        self.strans_lev_ojlv.Select(selected_lev_index)
+        self.strans_lev_ojlv.Focus(selected_lev_index)
+
+            
     def on_Export_Linelist(self, event):  
         with wx.FileDialog(self, "Export Matched Linelist", wildcard="Linelist Files (*.lin)|*.lin",
                        style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
@@ -761,7 +822,12 @@ class MyFrame(mainWindow):
                 # print(next_row_lev)
                 selected_lev = self.lopt_levs.loc[self.lopt_levs['Energy'] == next_row_lev]
                 
-                self.display_lopt_lev(selected_lev)         
+                self.display_lopt_lev(selected_lev)    
+            else:
+                self.lopt_level_panel.Hide()
+                self.lopt_line_panel.Hide()
+                self.sizer_8.Layout()
+                
         
             event.Skip()    
             
@@ -778,16 +844,27 @@ class MyFrame(mainWindow):
         self.search_listview(event, self.strans_lev_ojlv)
         
     def on_strans_line_search(self, event):  
-
+        search_bar = event.GetEventObject()
         try:
             self.search_listview(event, self.strans_lines_ojlv)
+            search_bar.SetBackgroundColour(wx.WHITE)
         except:
-            event.GetEventObject().Clear()
-            event.GetEventObject().SetBackgroundColour(wx.RED)
+            search_bar.Clear()
+            search_bar.SetBackgroundColour(wx.RED)
+          
             
-            
+class PopMenu(wx.Menu): 
+  
+    def __init__(self, parent): 
+        super(PopMenu, self).__init__() 
+        self.parent = parent 
+  
+        popmenu = wx.MenuItem(self, wx.NewId(), 'Add level') 
+        self.Append(popmenu) 
+        popmenu2 = wx.MenuItem(self, wx.NewId(), 'Delete level') 
+        self.Append(popmenu2)        
         
-        
+              
     
             
         
