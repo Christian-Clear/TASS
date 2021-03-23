@@ -3,6 +3,7 @@
 
 from ObjectListView import ObjectListView
 import itertools
+import wx
 
 
 class ObjectListViewTame(ObjectListView):
@@ -40,3 +41,4 @@ class ObjectListViewTame(ObjectListView):
                     self._SelectAndFocus(i)
                     return True
         return False
+

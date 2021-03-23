@@ -10,7 +10,7 @@ import os.path
 import bisect
 import configparser
 import subprocess
-from ObjectListView import ColumnDefn
+from ObjectListView import ColumnDefn, OLVEvent
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
 import glob
 
@@ -23,6 +23,7 @@ class MyFrame(mainWindow):
         mainWindow.__init__(self, *args, **kwds)
         
         self.cm_1 = 'cm\u207B\u00B9'
+        self.blank_strans_lev = {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0}
              
         self.load_main_config()
         self.load_project() 
@@ -38,10 +39,13 @@ class MyFrame(mainWindow):
         
         
         self.strans_lev_ojlv.SetColumns([
-            ColumnDefn("Level", "left", 100, 'label'),
-            ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f"),
-            ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f"),           
-            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True)])
+            ColumnDefn("Level", "left", 100, 'label', isEditable=True),
+            ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
+            ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f", isEditable=True),           
+            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True, isEditable=True)])
+        
+        self.strans_lev_ojlv.cellEditMode = self.strans_lev_ojlv.CELLEDIT_DOUBLECLICK
+        self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_strans_lev_edit)
         
         self.strans_lines_ojlv.SetColumns([
             ColumnDefn(f'Wavenumber ({self.cm_1})', 'left', 150, 'wavenumber', stringConverter="%.4f"),
@@ -178,6 +182,12 @@ class MyFrame(mainWindow):
     
     def main_strans(self, strans_levs):
         """Runs strans for the main element under study"""
+        
+        if self.blank_strans_lev in strans_levs:
+            wx.MessageBox('STRANS input contains blank levels. \n\nPlease edit or delete these before running STRANS.', 'Blank Levels Found', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.frame_statusbar.SetStatusText('')
+            return False
                      
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in main_desig column with empty lists
         desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()
@@ -185,6 +195,8 @@ class MyFrame(mainWindow):
         matched_lines = self.strans(strans_levs, desig_list, self.main_element_name)          
         self.df.update(matched_lines)  
         self.display_strans_lines()
+
+        return True
         
         
     def other_strans(self, other_lev_list):
@@ -200,13 +212,14 @@ class MyFrame(mainWindow):
 
         self.df.update(matched_lines)  
         self.display_strans_lines()
+
         
         
     def strans(self, strans_levs, desig_list, element_name):
         """Creates list of all possible transitions between levels of opposite parity that obey
         the J selection rule. The list is then compared to all lines in the self.db database and lines with 
         wavenumbers that within self.strans_wn_discrim are assigned the labels of the even and odd level."""
-        
+                    
         self.frame_statusbar.SetStatusText(f'Running Strans for {element_name}')
                 
         strans_levs_even = [x for x in strans_levs if x['parity']==1]
@@ -248,7 +261,7 @@ class MyFrame(mainWindow):
                         lower_lev = label_even
                         
                     matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})
-                    
+        
         return desig_list
         
         
@@ -290,7 +303,7 @@ class MyFrame(mainWindow):
         self.load_project_config()
         self.load_df()  
         self.load_plot_df()           
-        self.strans_levs = list(pd.read_csv(self.strans_lev_file).transpose().to_dict().values())                 
+        self.strans_levs = list(pd.read_csv(self.strans_lev_file, dtype={'parity':float}).transpose().to_dict().values())                 
         self.display_strans_levs() 
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
         
@@ -656,22 +669,29 @@ class MyFrame(mainWindow):
         self.update_df_cell(selected_wn, 'user_desig', '')
 
     def on_partial_strans(self, event):  # Run >> Strans(partial)
-        self.main_strans(self.strans_levs)
-        self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
-        self.frame_statusbar.SetStatusText('Strans Complete')
+        if self.main_strans(self.strans_levs):  # if strans ran succesfully
+            self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
+            self.frame_statusbar.SetStatusText('Strans Complete')
         
     def on_full_strans(self, event):  
-        self.main_strans(self.strans_levs)
-        self.other_strans(self.other_lev_list)
-        self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
-        self.frame_statusbar.SetStatusText('Strans Complete')
+        if self.main_strans(self.strans_levs): # if strans ran succesfully
+            self.other_strans(self.other_lev_list)
+            self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
+            self.frame_statusbar.SetStatusText('Strans Complete')
            
     def on_strans_del(self, event):  
         """Delete levels from self.strans_lev_file. This will be a permanent change."""
         selected_levs = self.strans_lev_ojlv.GetSelectedObjects()
         
         if selected_levs:  # if selection not empty
-            if wx.MessageBox('Are you sure you want to delete these levels? \nThis will be a permanent change.', 'Delete Levels?', 
+            if len(selected_levs) == 1:
+                message = 'Are you sure you want to delete this level?'
+                title = 'Delete Level?'
+            else:
+                message = f'Are you sure you want to delete these {len(selected_levs)} levels?'
+                title = 'Delete Levels?'
+        
+            if wx.MessageBox(message, title, 
                           wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:
                 
     
@@ -683,14 +703,23 @@ class MyFrame(mainWindow):
                 return
             
     def on_strans_add(self, event):  
-        selected_lev = self.strans_lev_ojlv.GetSelectedObject()
-        selected_lev_index = self.strans_lev_ojlv.GetIndexOf(selected_lev)
+        selection_index = self.strans_lev_ojlv.GetIndexOf(self.strans_lev_ojlv.GetSelectedObject())
         
-        self.PopupMenu(PopMenu(self.strans_lev_ojlv))
+        if selection_index == -1:  # no selected level
+            next_row = 0
+        else:
+            next_row = selection_index + 1
+
+        self.strans_levs.insert(next_row, self.blank_strans_lev)
+        self.display_strans_levs()
         
-        self.strans_lev_ojlv.DeselectAll()
-        self.strans_lev_ojlv.Select(selected_lev_index)
-        self.strans_lev_ojlv.Focus(selected_lev_index)
+
+    def on_strans_save(self, event):  
+        print("Event handler 'on_strans_save' not implemented!")
+        event.Skip()
+        
+    def on_strans_lev_edit(self, event):  
+        self.strans_levs = self.strans_lev_ojlv.GetObjects()  # updates the edited cells to strans_levs
 
             
     def on_Export_Linelist(self, event):  
@@ -830,10 +859,6 @@ class MyFrame(mainWindow):
                 
         
             event.Skip()    
-            
-    def on_strans_save(self, event):  # wxGlade: mainWindow.<event_handler>
-        print(self.window_1.GetSashPosition())
-        event.Skip()   
         
     def on_col_clicked(self, event):  # wxGlade: mainWindow.<event_handler>
         #self.lopt_lev_ojlv.SortBy(1)
