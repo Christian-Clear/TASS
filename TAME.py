@@ -5,7 +5,7 @@ import wx
 import numpy as np
 import pandas as pd
 import os
-from TAME_GUI import mainWindow
+from TAME_GUI import mainWindow, NewProjectFrame
 import os.path
 import bisect
 import configparser
@@ -703,12 +703,13 @@ class MyFrame(mainWindow):
                 return
             
     def on_strans_add(self, event):  
-        selection_index = self.strans_lev_ojlv.GetIndexOf(self.strans_lev_ojlv.GetSelectedObject())
+        # selection_index = self.strans_lev_ojlv.GetIndexOf(self.strans_lev_ojlv.GetSelectedObject())
         
-        if selection_index == -1:  # no selected level
-            next_row = 0
-        else:
-            next_row = selection_index + 1
+        # if selection_index == -1:  # no selected level
+        #     next_row = 0
+        # else:
+        #     next_row = selection_index + 1
+        next_row = 0
 
         self.strans_levs.insert(next_row, self.blank_strans_lev)
         self.display_strans_levs()
@@ -876,21 +877,133 @@ class MyFrame(mainWindow):
         except:
             search_bar.Clear()
             search_bar.SetBackgroundColour(wx.RED)
-          
             
-class PopMenu(wx.Menu): 
-  
-    def __init__(self, parent): 
-        super(PopMenu, self).__init__() 
-        self.parent = parent 
-  
-        popmenu = wx.MenuItem(self, wx.NewId(), 'Add level') 
-        self.Append(popmenu) 
-        popmenu2 = wx.MenuItem(self, wx.NewId(), 'Delete level') 
-        self.Append(popmenu2)        
+    def on_New(self, event):  
+        self.new_proj = newProject(self)
+        self.new_proj.Show()  
+        
+        self.template_config_file = 'template.ini'
+        self.new_config = configparser.ConfigParser()
+        self.new_config.read(self.template_config_file)
+        
+        self.new_config.set('files', 'strans_lev_file', self.new_proj.main_element_lev_file)
+        self.new_config.set('files', 'strans_lin_file', self.new_proj.linelist_file)
+        self.new_config.set('files', 'df_file', self.new_proj.df_file)
+        self.new_config.set('files', 'other_lev_files', self.new_proj.other_element_lev_files)
+        
+        self.new_config.set('tame', 'project_title', self.new_proj.project_name)
+        self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)
+        
+        self.new_config_file = self.new_proj.project_name + '.ini'
+        
+        with open(self.new_config_file, 'w') as configfile:
+            self.new_config.write(configfile)
+        
+        
+        
+        
+        
+        
+        
         
               
+class newProject(NewProjectFrame):
+    def __init__(self, *args, **kwds):
+        NewProjectFrame.__init__(self, *args, **kwds)
+        self.button_9.Disable()  # greys out back button on first window
+        self.other_element_lev_files = []
+        
+        self.config_file = 'TEST'
+        
+        
+        self.other_element_levs_ojlv.SetColumns([
+            ColumnDefn("Filename", "left", 500, 'filename'),          
+            ColumnDefn("Element Short Name", "left", 50, 'shortname', isSpaceFilling=True, isEditable=True)])
+        
+        self.other_element_levs_ojlv.SetEmptyListMsg('')
+        self.other_element_levs_ojlv.cellEditMode = self.other_element_levs_ojlv.CELLEDIT_SINGLECLICK
+        
+        
+    def on_main_lev_file_btn(self, event):
+        with wx.FileDialog(self, "Select level file", wildcard="level files (*.lev)|*.lev",
+                       style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
     
+            self.main_element_lev_file = fileDialog.GetPath()
+            self.main_lev_file_tc.SetValue(str(self.main_element_lev_file))
+
+    def on_linelist_file_btn(self, event):  # wxGlade: NewProjectFrame.<event_handler>
+        with wx.FileDialog(self, "Select linelist file", wildcard="linelist files (*.lin)|*.lin",
+                       style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+    
+            self.linelist_file = fileDialog.GetPath()
+            self.linelist_file_tc.SetValue(str(self.linelist_file))
+
+    def on_plot_files_btn(self, event):  # wxGlade: NewProjectFrame.<event_handler>
+        with wx.FileDialog(self, "Select linelist file", wildcard="plot files (*.asc)|*.asc",
+                       style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+    
+            self.plot_files = fileDialog.GetPaths()
+            for file in self.plot_files:
+                self.plot_file_tc.write(str(file) + '\n')
+
+    def on_cancel(self, event):
+        self.Destroy()
+
+    def on_next(self, event):
+        self.project_name = self.project_name_tc.GetValue()
+        self.df_file = self.project_name.split('.')[0] + '.pkl'
+        self.main_element_name = self.element_name_tc.GetValue()
+        
+        if not self.project_name or not self.main_element_name or not self.linelist_file or not self.plot_files:
+            wx.MessageBox('Please fill in all fields before continuing', 'Missing Project Parameters', 
+                      wx.OK | wx.ICON_EXCLAMATION)
+        else:
+            self.new_project_nb.ChangeSelection(1)
+
+    def on_other_lev_files_btn(self, event):
+        with wx.FileDialog(self, "Select linelist file", wildcard="level files (*.lev)|*.lev",
+                       style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+    
+            lev_files = fileDialog.GetPaths()
+            
+            for file in lev_files:
+                self.other_lev_files_tc.write(str(file) + '\n')                
+                self.other_element_lev_files.append({'filename':file, 'shortname':''})
+                
+            self.other_element_levs_ojlv.AddObjects(self.other_element_lev_files)
+
+    def on_back(self, event):
+        self.new_project_nb.ChangeSelection(0)
+
+    def on_ok(self, event):
+        
+        if not self.other_element_lev_files:
+            wx.MessageBox('Please fill in all fields before continuing', 'Missing Project Parameters', 
+                      wx.OK | wx.ICON_EXCLAMATION)     
+        else:
+            
+            if '' in [x['shortname'] for x in self.other_element_lev_files]:
+                wx.MessageBox('Please fill in short names for all elements before continuing', 'Missing Project Parameters', 
+                      wx.OK | wx.ICON_EXCLAMATION)
+            else:              
+                # SAVE all parameters to a new config file.
+                self.Destroy()
+        
+        
+    
+
             
         
 class KeyList(object):
