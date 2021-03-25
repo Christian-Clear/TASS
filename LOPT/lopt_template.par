@@ -1,7 +1,7 @@
-ni2_lopt.inp ; TRANSITIONS input file name; Explanations are below!
-ni2_lopt.fixed ; FIXED LEVELS input file name
-ni2_lopt.lev ; Levels OUTPUT file name
-ni2_lopt.lin ; Transitions OUTPUT file name
+ ; TRANSITIONS input file name; Explanations are below!
+ ; FIXED LEVELS input file name
+ ; Levels OUTPUT file name
+ ; Transitions OUTPUT file name
 N                 ; OMIT calc. wavelengths in ANGSTROMS in the output (Y/N)?
 Y                 ; TUNE single-line levels (Y/N)?
 N                 ; Print listing of correlated-lines uncert. effects (Y/N)?

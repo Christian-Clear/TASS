@@ -5,7 +5,7 @@ import wx
 import numpy as np
 import pandas as pd
 import os
-from TAME_GUI import mainWindow, NewProjectFrame
+from TAME_GUI import mainWindow, newProjectDialog, fixedLevelsDialog
 import os.path
 import bisect
 import configparser
@@ -22,28 +22,42 @@ class MyFrame(mainWindow):
     def __init__(self, *args, **kwds):
         mainWindow.__init__(self, *args, **kwds)
         
-        self.cm_1 = 'cm\u207B\u00B9'
-        self.blank_strans_lev = {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0}
-             
+        self.set_constants()
+        
         self.load_main_config()
         self.load_project() 
-        #print(self.df.head())
-        self.lopt_fixed_levels = ['d9  2D2']
-        self.lopt_inp_file = 'LOPT/ni2_lopt.inp'
-        self.lopt_par_file = 'LOPT/ni2_lopt.par'
-        self.lopt_fixed_file = 'LOPT/ni2_lopt.fixed'
-        self.lopt_lev_file = 'LOPT/ni2_lopt.lev'
-        self.lopt_lin_file = 'LOPT/ni2_lopt.lin'
-        self.star_discrim = 1.5
+        
+        self.configure_listviews()
+        self.configure_layout()
+        
+        
+    def set_constants(self):
+        self.cm_1 = 'cm\u207B\u00B9'
+        self.blank_strans_lev = {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0}
+   
+        
+    def configure_layout(self):
+                    
+        self.window_2.SetSashPosition(780)
+        self.window_1.SetSashPosition(380)
 
+        self.toolbar = NavigationToolbar(self.matplotlib_canvas)
+        self.toolbar.Realize()
+        self.matplotlib_sizer.Add(self.toolbar, 0, wx.ALIGN_CENTRE, border=5)
+        self.toolbar.update()
+        
+        self.lopt_level_panel.Hide()
+        self.lopt_line_panel.Hide()
+        self.sizer_8.Layout()
         
         
+    def configure_listviews(self):
         self.strans_lev_ojlv.SetColumns([
-            ColumnDefn("Level", "left", 100, 'label', isEditable=True),
-            ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
-            ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f", isEditable=True),           
-            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True, isEditable=True)])
-        
+        ColumnDefn("Level", "left", 100, 'label', isEditable=True),
+        ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
+        ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f", isEditable=True),           
+        ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True, isEditable=True)])
+    
         self.strans_lev_ojlv.cellEditMode = self.strans_lev_ojlv.CELLEDIT_DOUBLECLICK
         self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_strans_lev_edit)
         
@@ -59,16 +73,15 @@ class MyFrame(mainWindow):
         
         self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
         
-        
         self.group_column = ColumnDefn(f'Level ({self.cm_1})', 'left', 100, 'main_level', stringConverter="%.4f", groupKeyConverter=self.loptGroupKeyConverter)       
         self.lopt_lev_ojlv.SetColumns([
             self.group_column,
             ColumnDefn('', 'left', 20, 'star', stringConverter=self.star_to_asterix),
-            ColumnDefn('Fit', 'left', 30, 'tags'),
-            ColumnDefn('Intensity', 'left', 70, 'log_ew', stringConverter="%.2f"),
-            ColumnDefn('SNR', 'left', 50, 'peak', stringConverter="%d"),
-            ColumnDefn(f'Wn ({self.cm_1})', 'left', 100, 'wavenumber', stringConverter="%.4f"),
-            ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'uncW_o', stringConverter="%.4f"),
+            ColumnDefn('Fit', 'left', 30, 'tags', stringConverter=self.fit_converter),
+            ColumnDefn('Intensity', 'left', 70, 'log_ew', stringConverter=self.log_ew_converter),
+            ColumnDefn('SNR', 'left', 50, 'peak', stringConverter=self.snr_converter),
+            ColumnDefn(f'Wn ({self.cm_1})', 'left', 100, 'wavenumber', stringConverter=self.wn_converter),
+            ColumnDefn(f'Unc. ({self.cm_1})', 'left', 90, 'uncW_o', stringConverter=self.wn_converter),
             ColumnDefn(f'Obs-Calc ({self.cm_1})', 'left', 120, 'dWO-C', stringConverter=self.neg_num_str),
             ColumnDefn('Level', 'left', 100, 'other_level'),
             ColumnDefn('Tags', 'left', 40, 'F', stringConverter=self.correct_tags ,isSpaceFilling=True)])
@@ -76,30 +89,33 @@ class MyFrame(mainWindow):
         self.lopt_lev_ojlv.SetEmptyListMsg("Run LOPT first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
         self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)
-        
-        self.window_2.SetSashPosition(780)
-        self.window_1.SetSashPosition(380)
-        
         self.lopt_line_listctrl.EnableCheckBoxes(True)
 
-        self.toolbar = NavigationToolbar(self.matplotlib_canvas)
-        self.toolbar.Realize()
-        self.matplotlib_sizer.Add(self.toolbar, 0, wx.ALIGN_CENTRE, border=5)
-        self.toolbar.update()
-        
-        self.lopt_level_panel.Hide()
-        self.lopt_line_panel.Hide()
-        self.sizer_8.Layout()
-        
-        
-        
-        # self.lopt_line_comments_txtctrl.SetDefaultStyle(wx.TextAttr(wx.NullColour, wx.WHITE))
-        
 
     def loptGroupKeyConverter(self, energy):
         selected_line_index = self.lopt_levs.loc[self.lopt_levs['Energy'] == energy].index.values[0]
         return self.lopt_levs.at[selected_line_index, 'Designation']
-        
+    
+    def log_ew_converter(self, log_ew):
+        if str(log_ew) == 'nan':
+            return '-'
+        return f'{log_ew:.2f}'
+    
+    def wn_converter(self, wn):
+        if str(wn) == 'nan':
+            return '-'
+        return f'{wn:.4f}'
+    
+    def snr_converter(self, snr):
+        if str(snr) == 'nan':
+            return '-'
+        return f'{snr:.0f}'
+    
+    def fit_converter(self, fit):
+        if str(fit) == 'nan':
+            return '-'
+        return fit
+    
     def star_to_asterix(self, star):
         if star:
             return '*'
@@ -213,8 +229,7 @@ class MyFrame(mainWindow):
         self.df.update(matched_lines)  
         self.display_strans_lines()
 
-        
-        
+  
     def strans(self, strans_levs, desig_list, element_name):
         """Creates list of all possible transitions between levels of opposite parity that obey
         the J selection rule. The list is then compared to all lines in the self.db database and lines with 
@@ -264,8 +279,7 @@ class MyFrame(mainWindow):
         
         return desig_list
         
-        
-        
+
     def load_main_config(self):
         """Reads the main TAME config file and sets variables accordingly"""
         self.main_config_file = 'tame.ini'
@@ -286,8 +300,10 @@ class MyFrame(mainWindow):
         self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
         self.df_file = self.project_config.get('files', 'df_file')
         self.other_lev_list = self.project_config.get('files', 'other_lev_files').split('\n')
-        self.main_element_name = self.project_config.get('tame', 'main_element_name').strip("'")
-        
+
+        self.lopt_fixed_levels = self.project_config.get('lopt', 'fixed_levels').split(',')
+      
+        self.main_element_name = self.project_config.get('tame', 'main_element_name').strip("'")        
         self.project_title = self.project_config.get('tame', 'project_title').strip("'")
     
     
@@ -301,6 +317,14 @@ class MyFrame(mainWindow):
     def load_project(self):
         """Set all filenames and variables and load/reload all listctrls."""
         self.load_project_config()
+        
+        self.lopt_inp_file = f'LOPT/{self.main_element_name}_lopt.inp'
+        self.lopt_par_file = f'LOPT/{self.main_element_name}_lopt.par'
+        self.lopt_fixed_file = f'LOPT/{self.main_element_name}_lopt.fixed'
+        self.lopt_lev_file = f'LOPT/{self.main_element_name}_lopt.lev'
+        self.lopt_lin_file = f'LOPT/{self.main_element_name}_lopt.lin'
+        self.star_discrim = 1.5
+          
         self.load_df()  
         self.load_plot_df()           
         self.strans_levs = list(pd.read_csv(self.strans_lev_file, dtype={'parity':float}).transpose().to_dict().values())                 
@@ -315,6 +339,12 @@ class MyFrame(mainWindow):
     def save_project(self):
         self.save_df()
         self.save_main_config()
+        self.save_project_config()
+        
+    def save_project_config(self):
+        with open(self.project_config_file, 'w') as configfile:
+            self.project_config.write(configfile)
+        
         
     def save_main_config(self):        
         with open(self.main_config_file, 'w') as configfile:
@@ -327,6 +357,7 @@ class MyFrame(mainWindow):
             if lines == []:  # no lines have a main_designation in self.df ie strans has not been run
                 wx.MessageBox('No lines found for LOPT input. Please run STRANS first', 'No Matched Lines', 
                       wx.OK | wx.ICON_EXCLAMATION)
+                return False
                 
             else:
                 for line in lines:
@@ -370,18 +401,18 @@ class MyFrame(mainWindow):
                         
                             lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
                             inp_file.writelines(lopt_str)
+        return True
         
         
     def write_lopt_par(self):      
-        with open(self.lopt_par_file, 'r+') as par_file:
-            par_lines = par_file.readlines()
-            par_lines[0] = f'{self.main_element_name}_lopt.inp{par_lines[0][12:]}'
-            par_lines[1] = f'{self.main_element_name}_lopt.fixed{par_lines[1][14:]}'
-            par_lines[2] = f'{self.main_element_name}_lopt.lev{par_lines[2][12:]}'
-            par_lines[3] = f'{self.main_element_name}_lopt.lin{par_lines[3][12:]}'
+        with open('LOPT/lopt_template.par', 'r') as temp_par_file:
+            par_lines = temp_par_file.readlines()
+            par_lines[0] = f'{self.main_element_name}_lopt.inp{par_lines[0]}'
+            par_lines[1] = f'{self.main_element_name}_lopt.fixed{par_lines[1]}'
+            par_lines[2] = f'{self.main_element_name}_lopt.lev{par_lines[2]}'
+            par_lines[3] = f'{self.main_element_name}_lopt.lin{par_lines[3]}'
             
-            par_file.seek(0)
-            par_file.truncate()  # clear file
+        with open(self.lopt_par_file, 'w') as par_file:
             par_file.writelines(par_lines)
             
     
@@ -391,10 +422,13 @@ class MyFrame(mainWindow):
             
             for level in self.lopt_fixed_levels:
                 strans_lev = next((item for item in self.strans_levs if item['label']==level))
-                lev_energy = strans_lev['energy']              
-                lev_unc = f'{0.0:.4f}'
+                lev_energy = strans_lev['energy'] 
+                if lev_energy == 0.0:
+                    lev_unc = f'{0.0:.4f}'
+                else:
+                    lev_unc = f'{2.0:.4f}'
                              
-                fixed_strings.append(f'{level:>9}{lev_energy:>9}{lev_unc:>13}')
+                fixed_strings.append(f'{level:>9}{lev_energy:>9.2f}{lev_unc:>13}\n')
             
             fixed_file.writelines(fixed_strings)    
             
@@ -459,13 +493,10 @@ class MyFrame(mainWindow):
             lopt_lev_com_tmp['Comments'] = ''  
             self.lopt_lev_comments = pd.read_pickle(self.lopt_lev_comments_file) 
             self.lopt_lev_comments.combine_first(lopt_lev_com_tmp)  # should combine the two dataframes and keep the values from lopt_lev_comments
-            
-        
-        
 
         
-    def display_lopt_line(self, line):        
-        line_dict = list(line.transpose().to_dict().values()).pop()        
+    def display_lopt_line(self, line):  
+        line_dict = list(line.transpose().to_dict().values()).pop()   
         self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
         
@@ -703,18 +734,11 @@ class MyFrame(mainWindow):
                 return
             
     def on_strans_add(self, event):  
-        # selection_index = self.strans_lev_ojlv.GetIndexOf(self.strans_lev_ojlv.GetSelectedObject())
-        
-        # if selection_index == -1:  # no selected level
-        #     next_row = 0
-        # else:
-        #     next_row = selection_index + 1
         next_row = 0
 
         self.strans_levs.insert(next_row, self.blank_strans_lev)
         self.display_strans_levs()
         
-
     def on_strans_save(self, event):  
         print("Event handler 'on_strans_save' not implemented!")
         event.Skip()
@@ -773,9 +797,9 @@ class MyFrame(mainWindow):
     def on_Open(self, event):  # File >> Open
         save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
                                  wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
-        if save_dlg == wx.YES:
+        if save_dlg == wx.ID_YES:
             self.save_project()
-        elif save_dlg == wx.CANCEL:
+        elif save_dlg == wx.ID_CANCEL:
             return
 
         
@@ -793,33 +817,59 @@ class MyFrame(mainWindow):
                 self.frame_statusbar.SetStatusText('Project loaded successfully')
                 
             except:
-                wx.MessageBox('Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
+                wx.MessageBox('Unsupported or out of date .ini file. Please select a valid TAME project file.', 'Unsupported File', 
                       wx.OK | wx.ICON_EXCLAMATION)
+     
                 
+                
+    def set_fixed_levels(self):
+        fixed_level_dialog = fixedLevels(self)
+        
+        if fixed_level_dialog.ShowModal() == wx.ID_CANCEL:
+            return False
+        
+        self.lopt_fixed_levels = fixed_level_dialog.fixed_levels     
+        
+        level_config_string = ','.join(self.lopt_fixed_levels)
+        print(level_config_string)
+        self.project_config.set('lopt', 'fixed_levels', level_config_string)
+        
+        return True
+   
+    
     def on_lopt(self, event):
         """Create/update all neccessary files for LOPT input and then call LOPT"""
         
+        if self.lopt_fixed_levels == ['']:  # no fixed levels have been selected
+            if not self.set_fixed_levels():  # if cancel button pressed on fixed level dialog
+                return
+        
         self.frame_statusbar.SetStatusText('Writing LOPT input files...')
-        self.write_lopt_inp()
-        self.write_lopt_par()
-        self.write_lopt_fixed()
-        
-        self.frame_statusbar.SetStatusText('Running LOPT...')    
-        try:
-            p = subprocess.run(['java', '-jar', 'Lopt.jar', 'ni2_lopt.par'], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-            rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
-            tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
-            self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
+        if self.write_lopt_inp():  # lines in the strans linelist
+            self.write_lopt_par()
+            self.write_lopt_fixed()
             
-            self.get_lopt_output()
-            self.main_panel.ChangeSelection(1)  # changes the notebook tab to LOPT
-        
-        except FileNotFoundError as fnf:
-            if 'java' in str(fnf):
-                self.frame_statusbar.SetStatusText('LOPT error') 
-                wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
-                      wx.OK | wx.ICON_EXCLAMATION)
-        except IndexError:
+            self.frame_statusbar.SetStatusText('Running LOPT...')    
+            try:
+                p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
+                
+                rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
+                tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
+                self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
+                
+                self.get_lopt_output()
+                self.main_panel.ChangeSelection(1)  # changes the notebook tab to LOPT
+            
+            except FileNotFoundError as fnf:
+                print(fnf)
+                if 'java' in str(fnf):
+                    self.frame_statusbar.SetStatusText('LOPT error') 
+                    wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            # except IndexError:
+            #     print('v')
+            #     self.frame_statusbar.SetStatusText('Run STRANS first') 
+        else:
             self.frame_statusbar.SetStatusText('Run STRANS first') 
                         
     def on_Save(self, event):  
@@ -880,36 +930,63 @@ class MyFrame(mainWindow):
             
     def on_New(self, event):  
         self.new_proj = newProject(self)
-        self.new_proj.Show()  
-        
-        self.template_config_file = 'template.ini'
-        self.new_config = configparser.ConfigParser()
-        self.new_config.read(self.template_config_file)
-        
-        self.new_config.set('files', 'strans_lev_file', self.new_proj.main_element_lev_file)
-        self.new_config.set('files', 'strans_lin_file', self.new_proj.linelist_file)
-        self.new_config.set('files', 'df_file', self.new_proj.df_file)
-        self.new_config.set('files', 'other_lev_files', self.new_proj.other_element_lev_files)
-        
-        self.new_config.set('tame', 'project_title', self.new_proj.project_name)
-        self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)
-        
-        self.new_config_file = self.new_proj.project_name + '.ini'
-        
-        with open(self.new_config_file, 'w') as configfile:
-            self.new_config.write(configfile)
+        self.new_proj.ShowModal()  
         
         
+        try:
+            self.template_config_file = 'template.ini'
+            self.new_config = configparser.ConfigParser()
+            self.new_config.read(self.template_config_file)
+            
+            self.new_config.set('files', 'strans_lev_file', self.new_proj.main_element_lev_file)
+            self.new_config.set('files', 'strans_lin_file', self.new_proj.linelist_file)
+            self.new_config.set('files', 'df_file', self.new_proj.df_file)
+            
+            other_lev_files = ''
+            for file in self.new_proj.other_element_lev_files:
+                other_lev_files += f'{file["shortname"]},{file["filename"]}\n'
+                       
+            self.new_config.set('files', 'other_lev_files', other_lev_files)
+            
+            self.new_config.set('tame', 'project_title', self.new_proj.project_name)
+            self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)
+            
+            self.new_config_file = self.new_proj.project_name + '.ini'
+            
+            with open(self.new_config_file, 'w') as configfile:
+                self.new_config.write(configfile)
+                
+        except AttributeError:  # if the user cancelled the new project process.
+            event.Skip()
+  
         
-        
-        
-        
-        
-        
-              
-class newProject(NewProjectFrame):
+  
+    
+  
+    
+  
+class fixedLevels(fixedLevelsDialog):
     def __init__(self, *args, **kwds):
-        NewProjectFrame.__init__(self, *args, **kwds)
+        fixedLevelsDialog.__init__(self, *args, **kwds)  
+        self.fixed_levels = []
+        self.fixed_level_lc.EnableCheckBoxes(True)
+        self.fixed_level_lc.DeleteAllItems()
+                
+        for level in self.GetParent().strans_levs:
+            self.fixed_level_lc.Append([level['label'], f"{level['energy']:.4f}"])
+            
+    def on_fixed_lev_checked(self, event):
+        level = self.fixed_level_lc.GetItem(event.GetIndex(), 0).GetText()
+        self.fixed_levels.append(level)
+               
+    def on_fixed_lev_unchecked(self, event):
+        level = self.fixed_level_lc.GetItem(event.GetIndex(), 0).GetText()
+        self.fixed_levels = [x for x in self.fixed_levels if x != level]
+    
+              
+class newProject(newProjectDialog):
+    def __init__(self, *args, **kwds):
+        newProjectDialog.__init__(self, *args, **kwds)
         self.button_9.Disable()  # greys out back button on first window
         self.other_element_lev_files = []
         
