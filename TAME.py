@@ -5,7 +5,7 @@ import wx
 import numpy as np
 import pandas as pd
 import os
-from TAME_GUI import mainWindow, newProjectDialog, fixedLevelsDialog
+from TAME_GUI import mainWindow, newProjectDialog, fixedLevelsDialog, propertiesDialog
 import os.path
 import bisect
 import configparser
@@ -17,18 +17,24 @@ import glob
 import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+TAME_VERSION_STRING = 'Version: 0.0.1'
+
 
 class MyFrame(mainWindow):
     def __init__(self, *args, **kwds):
         mainWindow.__init__(self, *args, **kwds)
         
         self.set_constants()
-        
-        self.load_main_config()
-        self.load_project() 
-        
-        self.configure_listviews()
         self.configure_layout()
+        self.configure_listviews()
+        
+        try:
+            self.load_main_config()
+            self.load_project()
+            self.project_loaded = True
+            
+        except:
+            self.project_loaded = False
         
         
     def set_constants(self):
@@ -53,10 +59,10 @@ class MyFrame(mainWindow):
         
     def configure_listviews(self):
         self.strans_lev_ojlv.SetColumns([
-        ColumnDefn("Level", "left", 100, 'label', isEditable=True),
-        ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
-        ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f", isEditable=True),           
-        ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True, isEditable=True)])
+            ColumnDefn("Level", "left", 100, 'label', isEditable=True),
+            ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
+            ColumnDefn(f"Energy ({self.cm_1})", "left", 120, 'energy', stringConverter="%.4f", isEditable=True),           
+            ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True, isEditable=True)])
     
         self.strans_lev_ojlv.cellEditMode = self.strans_lev_ojlv.CELLEDIT_DOUBLECLICK
         self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_strans_lev_edit)
@@ -89,6 +95,7 @@ class MyFrame(mainWindow):
         self.lopt_lev_ojlv.SetEmptyListMsg("Run LOPT first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
         self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)
+        
         self.lopt_line_listctrl.EnableCheckBoxes(True)
 
 
@@ -286,7 +293,6 @@ class MyFrame(mainWindow):
         self.main_config = configparser.ConfigParser()
         self.main_config.read(self.main_config_file)
         
-        self.strans_wn_discrim = self.main_config.getfloat('strans', 'wn_discrim')
         self.project_config_file = self.main_config.get('project', 'project_config')
         self.lopt_default_unc = self.main_config.getfloat('lopt', 'default_unc')
         
@@ -302,6 +308,10 @@ class MyFrame(mainWindow):
         self.other_lev_list = self.project_config.get('files', 'other_lev_files').split('\n')
 
         self.lopt_fixed_levels = self.project_config.get('lopt', 'fixed_levels').split(',')
+        self.star_discrim = self.project_config.getfloat('lopt', 'star_discrim')
+        self.lopt_plot_width = self.project_config.getfloat('lopt', 'plot_width')
+        
+        self.strans_wn_discrim = self.project_config.getfloat('strans', 'wn_discrim')
       
         self.main_element_name = self.project_config.get('tame', 'main_element_name').strip("'")        
         self.project_title = self.project_config.get('tame', 'project_title').strip("'")
@@ -323,28 +333,21 @@ class MyFrame(mainWindow):
         self.lopt_fixed_file = f'LOPT/{self.main_element_name}_lopt.fixed'
         self.lopt_lev_file = f'LOPT/{self.main_element_name}_lopt.lev'
         self.lopt_lin_file = f'LOPT/{self.main_element_name}_lopt.lin'
-        self.star_discrim = 1.5
           
         self.load_df()  
         self.load_plot_df()           
         self.strans_levs = list(pd.read_csv(self.strans_lev_file, dtype={'parity':float}).transpose().to_dict().values())                 
         self.display_strans_levs() 
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
-        
-        
-    def create_project_config(self):
-        """Creates config file for a new project"""
-        self.project_config = configparser.ConfigParser()
     
     def save_project(self):
-        self.save_df()
-        self.save_main_config()
         self.save_project_config()
-        
+        self.save_main_config()
+        self.save_df()
+               
     def save_project_config(self):
         with open(self.project_config_file, 'w') as configfile:
-            self.project_config.write(configfile)
-        
+            self.project_config.write(configfile)        
         
     def save_main_config(self):        
         with open(self.main_config_file, 'w') as configfile:
@@ -508,6 +511,7 @@ class MyFrame(mainWindow):
                               desig['upper_level'], 
                               desig['lower_level'],
                               'wn_diff']
+
             
             self.lopt_line_listctrl.Append(list_ctrl_list)
             
@@ -533,7 +537,6 @@ class MyFrame(mainWindow):
         ### Plot spectra ###        
         self.plot_lopt_line(line_dict['wavenumber'], line_dict['peak'], line_dict['width'])
     
-        #self.lopt_line_panel.SetPosition((0,0))
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Show()
         self.sizer_8.Layout()
@@ -541,14 +544,14 @@ class MyFrame(mainWindow):
     def plot_lopt_line(self, wavenumber, peak, width):   
         """Plots the spectra from self.plot_df to the matplotlib plot. There are scaling factors that can be changed to show
         more/less of the plot area."""
-        plot_width = 1.
+        plot_width = self.lopt_plot_width
         # plot_y_scale = 1.1
         plot_x_scale = 5.
         
         self.matplotlib_canvas.clear()  
         ax = self.matplotlib_canvas.gca()   
         # df_part = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width) & (self.plot_df['wavenumber'] > wavenumber-plot_width)]
-        #Test to see if below or above is faster
+        # XXX Test to see if below or above is faster
         df_part_1 = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width)]
         df_part = df_part_1.loc[(df_part_1['wavenumber'] > wavenumber-plot_width)]
         
@@ -562,7 +565,7 @@ class MyFrame(mainWindow):
         self.matplotlib_canvas.axes.set_ylabel('SNR')
         ax.ticklabel_format(useOffset=False)
         # ax.set_ylim([df_part.min().min()*plot_y_scale, peak*plot_y_scale])
-        ax.set_xlim([wavenumber - (width/1000)*plot_x_scale, wavenumber + (width/1000)*plot_x_scale])
+        #ax.set_xlim([wavenumber - (width/1000)*plot_x_scale, wavenumber + (width/1000)*plot_x_scale])
         # ax.axvline(x=wavenumber)  # due to calibration this is not in the right place and looks odd
 
         self.matplotlib_canvas.draw()     
@@ -627,9 +630,82 @@ class MyFrame(mainWindow):
         except ValueError:
             return False
         
+    def set_fixed_levels(self):
+        fixed_level_dialog = fixedLevels(self)
+        
+        if fixed_level_dialog.ShowModal() == wx.ID_CANCEL:
+            return False
+                
+        self.lopt_fixed_levels = fixed_level_dialog.fixed_levels
+        level_config_string = ','.join(self.lopt_fixed_levels)
+        self.project_config.set('lopt', 'fixed_levels', level_config_string)
+        
+        return True
+    
+    
+    def export_linelist(self, full_list):
+        with wx.FileDialog(self, "Export Matched Linelist", wildcard="Linelist Files (*.lin)|*.lin",
+                       style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+    
+            filename = fileDialog.GetPath()
+
+            with open(filename, 'w') as file:
+                
+                if full_list:
+                    lines = self.df.values.tolist()
+                    linelist_type = 'Complete'
+                else:
+                    lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()
+                    linelist_type = 'Matched'
+                    
+                file.writelines('wavenumber,snr,fwhm,eq_width,fit,unc,main_element,other_elements\n') 
+                
+                for line in lines:
+                    main_level_string = ''
+                    other_level_string = ''
+                    
+                    for lev_pair in line[6]:
+                        
+                        if not main_level_string:
+                            sep = ''
+                        else:
+                            sep = '\t'                                
+                        main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
+                        
+                    for lev_pair in line[7]:
+                        
+                        if not other_level_string:
+                            sep = ''
+                        else:
+                            sep = '\t'                                
+                        other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
+                    
+                    line[0] = f'{line[0]:.4f}'
+                    line[1] = f'{line[1]:.0f}' 
+                    line[2] = f'{line[2]:.0f}' 
+                    line[3] = f'{line[3]:.0f}' 
+                    line[5] = f'{line[5]:.4f}' 
+                    line[6] = main_level_string
+                    line[7] = other_level_string
+                    
+                    file.writelines(','.join(line[:8]) + '\n') 
+                    
+        self.frame_statusbar.SetStatusText(f'{linelist_type} linelist exported to {filename}')   
+        
         
 
 ### Event-driven functions ###  
+
+    def on_preferences(self, event):
+        self.prop_dialog = preferenceDialog(self)
+        
+        if self.prop_dialog.ShowModal() == wx.ID_OK:
+            self.strans_wn_discrim = self.prop_dialog.strans_wn_discrim.GetValue()
+            self.star_discrim = self.prop_dialog.lopt_delwn_discrim.GetValue()
+            self.lopt_plot_width = self.prop_dialog.lopt_plot_width.GetValue()  
 
     def on_lopt_lev_comments(self, event):
         text = self.lopt_level_comments.GetValue()   
@@ -747,60 +823,22 @@ class MyFrame(mainWindow):
         self.strans_levs = self.strans_lev_ojlv.GetObjects()  # updates the edited cells to strans_levs
 
             
-    def on_Export_Linelist(self, event):  
-        with wx.FileDialog(self, "Export Matched Linelist", wildcard="Linelist Files (*.lin)|*.lin",
-                       style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+    def on_export_matched_linelist(self, event):
+        self.export_linelist(False)  # export only matched linelist
 
-            if fileDialog.ShowModal() == wx.ID_CANCEL:
-                return     # the user changed their mind
-    
-            filename = fileDialog.GetPath()
-                
-            # try:
-            with open(filename, 'w') as file:
-                    lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()
-                    file.writelines('wavenumber,snr,fwhm,eq_width,fit,unc,main_element,other_elements\n') 
-                    
-                    for line in lines:
-                        main_level_string = ''
-                        other_level_string = ''
-                        for lev_pair in line[6]:
-                            if not main_level_string:
-                                sep = ''
-                            else:
-                                sep = ',     '
-                            main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
-                            
-                        for lev_pair in line[7]:
-                            if not other_level_string:
-                                sep = ''
-                            else:
-                                sep = ',     '
-                            other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
-                            
-                        
-                        line[0] = f'{line[0]:.4f}'
-                        line[1] = f'{line[1]:.0f}' 
-                        line[2] = f'{line[2]:.0f}' 
-                        line[3] = f'{line[3]:.0f}' 
-                        line[5] = f'{line[5]:.4f}' 
-                        line[6] = main_level_string
-                        line[7] = other_level_string
-                        
-                        file.writelines(','.join(line[:7]) + '\n')   
-                        self.frame_statusbar.SetStatusText(f'Matched linelist exported to {filename}')       
-                
-            # except:
-            #     wx.MessageBox(f'Unsupported .ini file. Please select a TAME project file.', 'Unsupported File', 
-            #           wx.OK | wx.ICON_EXCLAMATION)
+    def on_export_full_linelist(self, event):
+        self.export_linelist(True)  # export complete linelist                
                 
     def on_Open(self, event):  # File >> Open
-        save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
-                                 wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
-        if save_dlg == wx.ID_YES:
-            self.save_project()
-        elif save_dlg == wx.ID_CANCEL:
-            return
+    
+        if self.project_loaded:
+            save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
+                                     wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
+        
+            if save_dlg == wx.ID_YES:
+                self.save_project()
+            elif save_dlg == wx.ID_CANCEL:
+                return
 
         
         with wx.FileDialog(self, "Open TAME project file", wildcard="project files (*.ini)|*.ini",
@@ -819,40 +857,56 @@ class MyFrame(mainWindow):
             except:
                 wx.MessageBox('Unsupported or out of date .ini file. Please select a valid TAME project file.', 'Unsupported File', 
                       wx.OK | wx.ICON_EXCLAMATION)
-     
+                    
+
+                    
+                    
+                    
+                    
+                
+    # def on_Save_As(self, event):  
+    #     with wx.FileDialog(self, "Save TAME project as", wildcard="project file (*.ini)|*.ini",
+    #                    style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT) as fileDialog:
+
+    #         if fileDialog.ShowModal() == wx.ID_CANCEL:
+    #             return     # the user changed their mind
+            
+    #         sa_file = fileDialog.GetPath()
+    #         sa_folder = os.path.dirname(sa_file)
+            
+    #         if sa_file.split('.')[-1] != 'ini':   #if user types new filename in dialog
+    #             sa_file += '.ini'
                 
                 
-    def set_fixed_levels(self):
-        fixed_level_dialog = fixedLevels(self)
+    #     self.project_config_file = sa_file
         
-        if fixed_level_dialog.ShowModal() == wx.ID_CANCEL:
-            return False
-        
-        self.lopt_fixed_levels = fixed_level_dialog.fixed_levels     
-        
-        level_config_string = ','.join(self.lopt_fixed_levels)
-        print(level_config_string)
-        self.project_config.set('lopt', 'fixed_levels', level_config_string)
-        
-        return True
+    #     self.strans_lev_file = self.project_config.get('files', 'strans_lev_file')
+    #     self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
+    #     self.df_file = self.project_config.get('files', 'df_file')
+      
+    #     self.project_title = self.project_config.get('tame', 'project_title').strip("'")
+                        
+            
+                
+    def on_edit_fixed_levels(self, event):
+        self.set_fixed_levels()          
    
     
     def on_lopt(self, event):
         """Create/update all neccessary files for LOPT input and then call LOPT"""
         
-        if self.lopt_fixed_levels == ['']:  # no fixed levels have been selected
+        if self.lopt_fixed_levels == [''] or self.lopt_fixed_levels == []:  # no fixed levels have been selected
             if not self.set_fixed_levels():  # if cancel button pressed on fixed level dialog
                 return
         
         self.frame_statusbar.SetStatusText('Writing LOPT input files...')
-        if self.write_lopt_inp():  # lines in the strans linelist
+        if self.write_lopt_inp():  # if there are lines in the strans linelist
             self.write_lopt_par()
             self.write_lopt_fixed()
             
             self.frame_statusbar.SetStatusText('Running LOPT...')    
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-                
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
@@ -861,14 +915,15 @@ class MyFrame(mainWindow):
                 self.main_panel.ChangeSelection(1)  # changes the notebook tab to LOPT
             
             except FileNotFoundError as fnf:
-                print(fnf)
                 if 'java' in str(fnf):
                     self.frame_statusbar.SetStatusText('LOPT error') 
                     wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
                           wx.OK | wx.ICON_EXCLAMATION)
-            # except IndexError:
-            #     print('v')
-            #     self.frame_statusbar.SetStatusText('Run STRANS first') 
+            except:  # XXX this needs work - put it in a scrolled dialog
+                wx.MessageBox('\n'.join(p), 'LOPT Issue', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+                    
+                    
         else:
             self.frame_statusbar.SetStatusText('Run STRANS first') 
                         
@@ -877,15 +932,18 @@ class MyFrame(mainWindow):
         self.frame_statusbar.SetStatusText('Project saved')                   
         
     def on_Exit(self, event):  # File >> Exit
-        save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
-                                 wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
-        if save_dlg == wx.YES:
-            self.save_project()
-            self.Destroy()
-        elif save_dlg == wx.NO:
-            self.Destroy() 
-        else:
-            return       
+    
+        if self.project_loaded:
+            save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
+                                     wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
+            if save_dlg == wx.YES:
+                self.save_project()
+                self.Destroy()
+            elif save_dlg == wx.NO:
+                self.Destroy() 
+            else:
+                return   
+        self.Destroy()
         
     def on_click_lopt_levs(self, event):  
         try:
@@ -908,10 +966,13 @@ class MyFrame(mainWindow):
                 self.lopt_line_panel.Hide()
                 self.sizer_8.Layout()
                 
+        except IndexError:  # virtual line selected
+            self.lopt_level_panel.Hide()
+            self.lopt_line_panel.Hide()
+            self.sizer_8.Layout()
+                  
         
-            event.Skip()    
-        
-    def on_col_clicked(self, event):  # wxGlade: mainWindow.<event_handler>
+    def on_col_clicked(self, event):  
         #self.lopt_lev_ojlv.SortBy(1)
         # self.lopt_lev_ojlv.RebuildGroups()
         event.Skip()
@@ -951,6 +1012,8 @@ class MyFrame(mainWindow):
             self.new_config.set('tame', 'project_title', self.new_proj.project_name)
             self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)
             
+            self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels
+            
             self.new_config_file = self.new_proj.project_name + '.ini'
             
             with open(self.new_config_file, 'w') as configfile:
@@ -959,7 +1022,26 @@ class MyFrame(mainWindow):
         except AttributeError:  # if the user cancelled the new project process.
             event.Skip()
   
+    def on_about(self, event):  
+        description = """
+        Here is the long description about what TAME is and what is does.
         
+        I should include the relevent files it draws from etc.
+        
+        There should be a not to read the manual for more info
+        
+        Maybe contact info for me here as well.
+        """
+        
+        aboutInfo = wx.adv.AboutDialogInfo()
+        aboutInfo.SetName("Term Analysis Made Easy (TAME)")
+        aboutInfo.SetVersion(TAME_VERSION_STRING)
+        aboutInfo.SetDescription(description)
+        aboutInfo.SetCopyright("(C) 2021")
+        aboutInfo.SetWebSite("http:#myapp.org")
+        aboutInfo.AddDeveloper("Christian Clear")
+        
+        wx.adv.AboutBox(aboutInfo)
   
     
   
@@ -968,12 +1050,19 @@ class MyFrame(mainWindow):
 class fixedLevels(fixedLevelsDialog):
     def __init__(self, *args, **kwds):
         fixedLevelsDialog.__init__(self, *args, **kwds)  
-        self.fixed_levels = []
+        self.fixed_levels = [x for x in self.GetParent().lopt_fixed_levels if x != '']
         self.fixed_level_lc.EnableCheckBoxes(True)
         self.fixed_level_lc.DeleteAllItems()
+        strans_levs = self.GetParent().strans_levs
                 
-        for level in self.GetParent().strans_levs:
+        for level in strans_levs:
             self.fixed_level_lc.Append([level['label'], f"{level['energy']:.4f}"])
+
+        ticked_lev_idx = [strans_levs.index(x) for x in strans_levs if x['label'] in self.fixed_levels]
+        
+        with wx.EventBlocker(self):  # stops item checked event from firing
+            for idx in ticked_lev_idx:
+                self.fixed_level_lc.CheckItem(idx)            
             
     def on_fixed_lev_checked(self, event):
         level = self.fixed_level_lc.GetItem(event.GetIndex(), 0).GetText()
@@ -982,6 +1071,15 @@ class fixedLevels(fixedLevelsDialog):
     def on_fixed_lev_unchecked(self, event):
         level = self.fixed_level_lc.GetItem(event.GetIndex(), 0).GetText()
         self.fixed_levels = [x for x in self.fixed_levels if x != level]
+    
+    def on_fixed_lev_ok(self, event):  
+        if self.fixed_levels == ['']:  # no fixed level(s) selected
+            wx.MessageBox('At least one level must be fixed.', 'Fixed Level Error', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+        else:
+            self.EndModal(wx.ID_OK)
+            
+        
     
               
 class newProject(newProjectDialog):
@@ -1068,16 +1166,47 @@ class newProject(newProjectDialog):
         
         if not self.other_element_lev_files:
             wx.MessageBox('Please fill in all fields before continuing', 'Missing Project Parameters', 
-                      wx.OK | wx.ICON_EXCLAMATION)     
+                          wx.OK | wx.ICON_EXCLAMATION)     
         else:
             
             if '' in [x['shortname'] for x in self.other_element_lev_files]:
                 wx.MessageBox('Please fill in short names for all elements before continuing', 'Missing Project Parameters', 
-                      wx.OK | wx.ICON_EXCLAMATION)
+                              wx.OK | wx.ICON_EXCLAMATION)
             else:              
                 # SAVE all parameters to a new config file.
                 self.Destroy()
+                
+                
+class preferenceDialog(propertiesDialog):
+    def __init__(self, *args, **kwds):   
+        propertiesDialog.__init__(self, *args, **kwds)        
+        self.parent = self.GetParent()
         
+        self.strans_wn_discrim.SetValue(f'{self.parent.strans_wn_discrim}')
+        self.lopt_delwn_discrim.SetValue(f'{self.parent.star_discrim}')
+        self.lopt_plot_width.SetValue(f'{self.parent.lopt_plot_width}')
+        
+    def on_strans_wn_discrim(self, event):  
+        if not self.parent.is_float(self.strans_wn_discrim.GetValue()):
+            wx.MessageBox('This field must be a number', 'Incorrect Parameter', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.strans_wn_discrim.SetValue(f'{self.parent.strans_wn_discrim}')
+
+    def on_lopt_delwn_discrim(self, event):  
+        if not self.parent.is_float(self.lopt_delwn_discrim.GetValue()):
+            wx.MessageBox('This field must be a number', 'Incorrect Parameter', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.lopt_delwn_discrim.SetValue(f'{self.parent.strans_wn_discrim}')
+
+    def on_lopt_plot_width(self, event):  
+        if not self.parent.is_float(self.lopt_plot_width.GetValue()):
+            wx.MessageBox('This field must be a number', 'Incorrect Parameter', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.lopt_plot_width.SetValue(f'{self.parent.strans_wn_discrim}')
+
+    def on_ok(self, event):  # wxGlade: propertiesDialog.<event_handler>
+        print("Event handler 'on_ok' not implemented!")
+        event.Skip()
         
     
 
