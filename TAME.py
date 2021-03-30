@@ -12,7 +12,6 @@ import configparser
 import subprocess
 from ObjectListView import ColumnDefn, OLVEvent
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
-import glob
 
 import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -38,12 +37,12 @@ class MyFrame(mainWindow):
         
         
     def set_constants(self):
-        self.cm_1 = 'cm\u207B\u00B9'
+        """Set the constants that are used throughout TAME."""
+        self.cm_1 = 'cm\u207B\u00B9'  # unicode for inverse centimetres
         self.blank_strans_lev = {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0}
    
-        
     def configure_layout(self):
-                    
+        """ Configure the main TAME screen layout and positioning."""
         self.window_2.SetSashPosition(780)
         self.window_1.SetSashPosition(380)
 
@@ -58,6 +57,7 @@ class MyFrame(mainWindow):
         
         
     def configure_listviews(self):
+        """Set column definitions and settings for all object and group listviews."""
         self.strans_lev_ojlv.SetColumns([
             ColumnDefn("Level", "left", 100, 'label', isEditable=True),
             ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
@@ -98,58 +98,65 @@ class MyFrame(mainWindow):
         
         self.lopt_line_listctrl.EnableCheckBoxes(True)
 
-
+    ### String/Group Converters for Object and Group Listviews #################
     def loptGroupKeyConverter(self, energy):
+        """Convert energy of group to the level designation."""
         selected_line_index = self.lopt_levs.loc[self.lopt_levs['Energy'] == energy].index.values[0]
         return self.lopt_levs.at[selected_line_index, 'Designation']
     
     def log_ew_converter(self, log_ew):
-        if str(log_ew) == 'nan':
+        """Convert equivalent width (from .lin file) to log(ew)."""  # XXX Check that this is right? log_ew to log(ew)?
+        if str(log_ew) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return '-'
         return f'{log_ew:.2f}'
     
     def wn_converter(self, wn):
-        if str(wn) == 'nan':
+        """Convert wn to 4 decimal places."""
+        if str(wn) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return '-'
         return f'{wn:.4f}'
     
     def snr_converter(self, snr):
-        if str(snr) == 'nan':
+        """Convert SNR to integer."""
+        if str(snr) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return '-'
         return f'{snr:.0f}'
     
     def fit_converter(self, fit):
-        if str(fit) == 'nan':
+        """Correct formatting for virtual lines."""
+        if str(fit) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return '-'
         return fit
     
     def star_to_asterix(self, star):
+        """Convert boolean of star to asterix or not."""
         if star:
             return '*'
         return ''
         
     def correct_tags(self, tag):
-        if str(tag) == 'nan':
+        """Correct formatting for virtual lines."""
+        if str(tag) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return ''
         return tag.upper()
     
     def neg_num_str(self, diff):
-        if diff < 0.0:
-            return f'{diff:.4f}'
-        else:
-            return f' {diff:.4f}'
+        """Convert diff to 4 d.p. float and make it right alinged. Means that negative numbers aren't shifted to the right."""
+        return f'{diff:>7.4f}'
+    ############################################################################
+    
         
     def load_plot_df(self):
-        """Loads or creates the matplotlib data from Xgremlin ascii linelist files - maybe better as part of the wizard?"""
-        file = f'{self.project_title}_plot.pkl'
-        path='/home/christian/Desktop/TASS'
+        """Loads plot_df for the matplotlib plot from the user-selected Xgremlin ascii linelist files.
+        The plot_df file is created as part of the new project process."""
+        # path=os.path.dirname(self.plot_df_file)
 
-        if not os.path.isfile(file):  # if no existing DataFrame is present
-            self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
-            self.plot_df.to_pickle(file) 
-        else:
-            self.plot_df = pd.read_pickle(file) 
-        
+        # if not os.path.isfile(self.plot_df_file):  # if no existing DataFrame is present
+        #     self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
+        #     self.plot_df.to_pickle(self.plot_df_file) 
+        # else:
+        #     self.plot_df = pd.read_pickle(self.plot_df_file) 
+        self.plot_df = pd.read_pickle(self.plot_df_file) 
         # self.plot_df.sort_values(by=['wavenumber'], ascending=True, inplace=True)
         # self.plot_df.set_index('wavenumber', inplace=True, drop=True)
 
@@ -161,7 +168,7 @@ class MyFrame(mainWindow):
             
     def display_strans_lines(self):
         """Writes lines with designations from self.df to the strans_lines_ojlv ObjectListView"""   
-        strans_lines = list(self.df.loc[self.df.main_desig.str.len() > 0 ].transpose().to_dict().values())
+        strans_lines = list(self.df.loc[self.df.main_desig.str.len() > 0 ].transpose().to_dict().values())  # convert to list of dicts
         
         for line in strans_lines:
             main_level_string = ''
@@ -201,7 +208,6 @@ class MyFrame(mainWindow):
     def save_df(self):
         """Saves the main pandas DataFrame self.df to the pickle file."""
         self.df.to_pickle(self.df_file)    
-    
     
     def main_strans(self, strans_levs):
         """Runs strans for the main element under study"""
@@ -301,10 +307,13 @@ class MyFrame(mainWindow):
         """Reads the project config file and sets variables accordingly"""
         self.project_config = configparser.ConfigParser()
         self.project_config.read(self.project_config_file)
+
         
         self.strans_lev_file = self.project_config.get('files', 'strans_lev_file')
         self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
         self.df_file = self.project_config.get('files', 'df_file')
+        self.plot_df_file = self.project_config.get('files', 'plot_file')
+        self.lopt_lev_comments_file = self.project_config.get('files', 'lopt_lev_comments_file')
         self.other_lev_list = self.project_config.get('files', 'other_lev_files').split('\n')
 
         self.lopt_fixed_levels = self.project_config.get('lopt', 'fixed_levels').split(',')
@@ -334,8 +343,8 @@ class MyFrame(mainWindow):
         self.lopt_lev_file = f'LOPT/{self.main_element_name}_lopt.lev'
         self.lopt_lin_file = f'LOPT/{self.main_element_name}_lopt.lin'
           
-        self.load_df()  
-        self.load_plot_df()           
+        self.load_df() 
+        self.load_plot_df()         
         self.strans_levs = list(pd.read_csv(self.strans_lev_file, dtype={'parity':float}).transpose().to_dict().values())                 
         self.display_strans_levs() 
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
@@ -344,6 +353,17 @@ class MyFrame(mainWindow):
         self.save_project_config()
         self.save_main_config()
         self.save_df()
+        self.save_strans_levs()
+        self.save_lev_comments_df()
+    
+    def save_lev_comments_df(self):
+        self.lopt_lev_comments.to_pickle(self.lopt_lev_comments_file) 
+        
+    def save_strans_levs(self):
+        with open(self.strans_lev_file, 'w') as lev_file:
+            lev_file.write('label,j,energy,parity\n')
+            for lev in self.strans_levs:
+                lev_file.write(f"{lev['label']},{lev['j']},{lev['energy']},{lev['parity']}\n")
                
     def save_project_config(self):
         with open(self.project_config_file, 'w') as configfile:
@@ -482,20 +502,22 @@ class MyFrame(mainWindow):
         # print(duplicated_lines)
         self.lopt_lev_ojlv.SetObjects(duplicated_lines) 
         
+        self.lopt_output_lines = duplicated_lines
+        
         self.load_lopt_lev_comments()  # needs to be done properly
         
         
     def load_lopt_lev_comments(self):
-        self.lopt_lev_comments_file = 'lopt_lev.pkl'
+        
         if not os.path.isfile(self.lopt_lev_comments_file):  # if no existing DataFrame is present
             self.lopt_lev_comments = self.lopt_levs[['Designation']].copy()
             self.lopt_lev_comments['Comments'] = ''        
             self.lopt_lev_comments.to_pickle(self.lopt_lev_comments_file) 
         else:
-            lopt_lev_com_tmp = self.lopt_levs[['Designation']].copy()
-            lopt_lev_com_tmp['Comments'] = ''  
+            # lopt_lev_com_tmp = self.lopt_levs[['Designation']].copy()
+            # lopt_lev_com_tmp['Comments'] = ''  
             self.lopt_lev_comments = pd.read_pickle(self.lopt_lev_comments_file) 
-            self.lopt_lev_comments.combine_first(lopt_lev_com_tmp)  # should combine the two dataframes and keep the values from lopt_lev_comments
+            # self.lopt_lev_comments.combine_first(lopt_lev_com_tmp)  # should combine the two dataframes and keep the values from lopt_lev_comments
 
         
     def display_lopt_line(self, line):  
@@ -699,6 +721,47 @@ class MyFrame(mainWindow):
 
 ### Event-driven functions ###  
 
+    def on_export_lopt_levs(self, event):          
+        with wx.FileDialog(self, "Export LOPT Sorted Levels", wildcard="Linelist Files (*.llf)|*.llf",
+                       style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+    
+            filename = fileDialog.GetPath()
+            
+            if filename.split('.')[-1] != 'llf':   #if user types new filename in dialog
+                filename += '.llf'
+            
+            lopt_levels = list(self.lopt_levs.transpose().to_dict().values())
+
+            with open(filename, 'w') as file:
+        
+                for level in lopt_levels: 
+                    file.write('--------------------------------------------\n')
+                    file.write('Config      Energy (cm-1)   D1        D2        D3        No. of Lines  Comments\n')
+                    file.write(f"{level['Designation']:<12}{level['Energy']:<16}{level['D1']:<10}{level['D2']:<10}{level['D3']:<10}{level['N_lines']:<14}{level['Comments']}\n\n")
+                    file.write('   Fit  log(EW) SNR     Wn_Obs (cm-1)  Unc_Wn_obs  del_Wn(Obs-C)  Level       Tags\n')
+                    
+                    lopt_lines = [x for x in self.lopt_output_lines if x['other_level'] == level['Designation']]
+                    
+                    for line in lopt_lines:
+                        if line['star']:
+                            star = '*'
+                        else:
+                            star= ' '
+                        
+                        if line['L1'] == line['other_level']:
+                            trans_lev = line['L2']
+                        else:
+                            trans_lev = line['L1']
+                        
+                        file.write(f"{star:<3}{line['tags']:<5}{line['log_ew']:<8.2f}{line['peak']:<8.0f}{line['wavenumber']:<15.4f}{line['uncW_o']:<12.4f}{line['dWO-C']:>7.4f}        {trans_lev:<12}Tags\n")
+                    
+                    file.write('--------------------------------------------\n')
+        
+        
+
     def on_preferences(self, event):
         self.prop_dialog = preferenceDialog(self)
         
@@ -810,9 +873,7 @@ class MyFrame(mainWindow):
                 return
             
     def on_strans_add(self, event):  
-        next_row = 0
-
-        self.strans_levs.insert(next_row, self.blank_strans_lev)
+        self.strans_levs.insert(0, {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0})  # inserts blank line at head of the table
         self.display_strans_levs()
         
     def on_strans_save(self, event):  
@@ -821,7 +882,6 @@ class MyFrame(mainWindow):
         
     def on_strans_lev_edit(self, event):  
         self.strans_levs = self.strans_lev_ojlv.GetObjects()  # updates the edited cells to strans_levs
-
             
     def on_export_matched_linelist(self, event):
         self.export_linelist(False)  # export only matched linelist
@@ -854,43 +914,38 @@ class MyFrame(mainWindow):
                 self.save_main_config()
                 self.frame_statusbar.SetStatusText('Project loaded successfully')
                 
-            except:
+            except ValueError:  # XXX need to change this back to generic error - or better yet - to just the specific one
                 wx.MessageBox('Unsupported or out of date .ini file. Please select a valid TAME project file.', 'Unsupported File', 
-                      wx.OK | wx.ICON_EXCLAMATION)
-                    
-
-                    
-                    
-                    
-                    
+                      wx.OK | wx.ICON_EXCLAMATION)    
                 
     # def on_Save_As(self, event):  
-    #     with wx.FileDialog(self, "Save TAME project as", wildcard="project file (*.ini)|*.ini",
-    #                    style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT) as fileDialog:
 
-    #         if fileDialog.ShowModal() == wx.ID_CANCEL:
-    #             return     # the user changed their mind
+        # with wx.FileDialog(self, "Save TAME project as", wildcard="project file (*.ini)|*.ini",
+        #                 style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT) as fileDialog:
+
+        #     if fileDialog.ShowModal() == wx.ID_CANCEL:
+        #         return     # the user changed their mind
             
-    #         sa_file = fileDialog.GetPath()
-    #         sa_folder = os.path.dirname(sa_file)
+        #     sa_file = fileDialog.GetPath()
+        #     sa_folder = os.path.dirname(sa_file)
             
-    #         if sa_file.split('.')[-1] != 'ini':   #if user types new filename in dialog
-    #             sa_file += '.ini'
+        #     if sa_file.split('.')[-1] != 'ini':   #if user types new filename in dialog
+        #         sa_file += '.ini'
+        # print(self.project_config_file)
                 
-                
-    #     self.project_config_file = sa_file
+            
+        # self.project_config_file = sa_file
         
-    #     self.strans_lev_file = self.project_config.get('files', 'strans_lev_file')
-    #     self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
-    #     self.df_file = self.project_config.get('files', 'df_file')
+        # self.strans_lev_file = self.project_config.get('files', 'strans_lev_file')
+        # self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
+        # self.df_file = self.project_config.get('files', 'df_file')
       
-    #     self.project_title = self.project_config.get('tame', 'project_title').strip("'")
+        # self.project_title = self.project_config.get('tame', 'project_title').strip("'")
                         
             
                 
     def on_edit_fixed_levels(self, event):
         self.set_fixed_levels()          
-   
     
     def on_lopt(self, event):
         """Create/update all neccessary files for LOPT input and then call LOPT"""
@@ -900,30 +955,32 @@ class MyFrame(mainWindow):
                 return
         
         self.frame_statusbar.SetStatusText('Writing LOPT input files...')
+        
         if self.write_lopt_inp():  # if there are lines in the strans linelist
             self.write_lopt_par()
             self.write_lopt_fixed()
             
-            self.frame_statusbar.SetStatusText('Running LOPT...')    
+            self.frame_statusbar.SetStatusText('Running LOPT...')   
+            
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
+                print(p)
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
                 
                 self.get_lopt_output()
                 self.main_panel.ChangeSelection(1)  # changes the notebook tab to LOPT
-            
             except FileNotFoundError as fnf:
+                
                 if 'java' in str(fnf):
                     self.frame_statusbar.SetStatusText('LOPT error') 
                     wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
                           wx.OK | wx.ICON_EXCLAMATION)
-            except:  # XXX this needs work - put it in a scrolled dialog
-                wx.MessageBox('\n'.join(p), 'LOPT Issue', 
-                          wx.OK | wx.ICON_EXCLAMATION)
                     
-                    
+            # except:  # XXX this needs work - put it in a scrolled dialog
+            #     wx.MessageBox('\n'.join(p), 'LOPT Issue', 
+            #               wx.OK | wx.ICON_EXCLAMATION)
         else:
             self.frame_statusbar.SetStatusText('Run STRANS first') 
                         
@@ -993,7 +1050,6 @@ class MyFrame(mainWindow):
         self.new_proj = newProject(self)
         self.new_proj.ShowModal()  
         
-        
         try:
             self.template_config_file = 'template.ini'
             self.new_config = configparser.ConfigParser()
@@ -1002,23 +1058,28 @@ class MyFrame(mainWindow):
             self.new_config.set('files', 'strans_lev_file', self.new_proj.main_element_lev_file)
             self.new_config.set('files', 'strans_lin_file', self.new_proj.linelist_file)
             self.new_config.set('files', 'df_file', self.new_proj.df_file)
-            
+            self.plot_df_file = self.new_proj.project_file_name + '_plot.pkl'
+            self.new_config.set('files', 'plot_file', self.plot_df_file)              
+            self.new_config.set('files', 'lopt_lev_comments_file', self.new_proj.project_file_name + '_lev_comments.pkl')
+           
             other_lev_files = ''
             for file in self.new_proj.other_element_lev_files:
                 other_lev_files += f'{file["shortname"]},{file["filename"]}\n'
-                       
             self.new_config.set('files', 'other_lev_files', other_lev_files)
             
             self.new_config.set('tame', 'project_title', self.new_proj.project_name)
             self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)
             
-            self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels
+            self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels for new project
             
-            self.new_config_file = self.new_proj.project_name + '.ini'
+            self.new_config_file = self.new_proj.project_file_name + '.ini'
             
             with open(self.new_config_file, 'w') as configfile:
                 self.new_config.write(configfile)
                 
+            self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in self.new_proj.plot_files], ignore_index=True)
+            self.plot_df.to_pickle(self.plot_df_file) 
+            
         except AttributeError:  # if the user cancelled the new project process.
             event.Skip()
   
@@ -1087,10 +1148,7 @@ class newProject(newProjectDialog):
         newProjectDialog.__init__(self, *args, **kwds)
         self.button_9.Disable()  # greys out back button on first window
         self.other_element_lev_files = []
-        
-        self.config_file = 'TEST'
-        
-        
+
         self.other_element_levs_ojlv.SetColumns([
             ColumnDefn("Filename", "left", 500, 'filename'),          
             ColumnDefn("Element Short Name", "left", 50, 'shortname', isSpaceFilling=True, isEditable=True)])
@@ -1098,9 +1156,20 @@ class newProject(newProjectDialog):
         self.other_element_levs_ojlv.SetEmptyListMsg('')
         self.other_element_levs_ojlv.cellEditMode = self.other_element_levs_ojlv.CELLEDIT_SINGLECLICK
         
+    def on_project_file_btn(self, event):
+        
+        with wx.DirDialog (None, "Select Project Folder", "", wx.DD_DEFAULT_STYLE) as fileDialog:
+
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+
+                
+            self.project_path = fileDialog.GetPath() + '/'
+            self.project_path_tc.SetValue(str(self.project_path))
+            
         
     def on_main_lev_file_btn(self, event):
-        with wx.FileDialog(self, "Select level file", wildcard="level files (*.lev)|*.lev",
+        with wx.FileDialog(self, "Select Main Element Level File", wildcard="level files (*.lev)|*.lev",
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
@@ -1110,7 +1179,7 @@ class newProject(newProjectDialog):
             self.main_lev_file_tc.SetValue(str(self.main_element_lev_file))
 
     def on_linelist_file_btn(self, event):  # wxGlade: NewProjectFrame.<event_handler>
-        with wx.FileDialog(self, "Select linelist file", wildcard="linelist files (*.lin)|*.lin",
+        with wx.FileDialog(self, "Select Linelist File", wildcard="linelist files (*.lin)|*.lin",
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
@@ -1135,8 +1204,9 @@ class newProject(newProjectDialog):
 
     def on_next(self, event):
         self.project_name = self.project_name_tc.GetValue()
-        self.df_file = self.project_name.split('.')[0] + '.pkl'
         self.main_element_name = self.element_name_tc.GetValue()
+        self.project_file_name = self.project_path + self.project_name.replace(' ', '_')
+        self.df_file = self.project_file_name + '.pkl'
         
         if not self.project_name or not self.main_element_name or not self.linelist_file or not self.plot_files:
             wx.MessageBox('Please fill in all fields before continuing', 'Missing Project Parameters', 
@@ -1172,7 +1242,7 @@ class newProject(newProjectDialog):
             if '' in [x['shortname'] for x in self.other_element_lev_files]:
                 wx.MessageBox('Please fill in short names for all elements before continuing', 'Missing Project Parameters', 
                               wx.OK | wx.ICON_EXCLAMATION)
-            else:              
+            else:   
                 # SAVE all parameters to a new config file.
                 self.Destroy()
                 
