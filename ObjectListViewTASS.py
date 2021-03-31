@@ -41,4 +41,8 @@ class ObjectListViewTame(ObjectListView):
                     self._SelectAndFocus(i)
                     return True
         return False
+    
+    def GetLastEditedObject(self):
+        idx = self.cellBeingEdited[0]
+        return self.GetObjectAt(idx)
 

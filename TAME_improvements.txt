@@ -3,3 +3,5 @@
 3. Check if float precision = high is really needed on read_csv for pandas or is just eating run time up.
 4. error catching on many things:
 	a. if java not installed for lopt
+	
+5. comments for deleted levels are not deleted from lopt_lev_comments at the minute

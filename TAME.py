@@ -30,11 +30,9 @@ class MyFrame(mainWindow):
         try:
             self.load_main_config()
             self.load_project()
-            self.project_loaded = True
-            
+            self.project_loaded = True          
         except:
             self.project_loaded = False
-        
         
     def set_constants(self):
         """Set the constants that are used throughout TAME."""
@@ -65,7 +63,9 @@ class MyFrame(mainWindow):
             ColumnDefn("Parity", "left", 50, 'parity', stringConverter="%d", isSpaceFilling=True, isEditable=True)])
     
         self.strans_lev_ojlv.cellEditMode = self.strans_lev_ojlv.CELLEDIT_DOUBLECLICK
-        self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_strans_lev_edit)
+        self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_finish_strans_lev_edit)
+        self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_STARTING, self.on_start_strans_lev_edit)
+        
         
         self.strans_lines_ojlv.SetColumns([
             ColumnDefn(f'Wavenumber ({self.cm_1})', 'left', 150, 'wavenumber', stringConverter="%.4f"),
@@ -129,7 +129,7 @@ class MyFrame(mainWindow):
         return fit
     
     def star_to_asterix(self, star):
-        """Convert boolean of star to asterix or not."""
+        """Convert boolean of star to asterix or empty string."""
         if star:
             return '*'
         return ''
@@ -229,8 +229,7 @@ class MyFrame(mainWindow):
         
         
     def other_strans(self, other_lev_list):
-        """Runs strans for all other elements that could be present in the linelist"""
-                     
+        """Runs strans for all other elements that could be present in the linelist"""                     
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in other_desig column with empty lists
         desig_list = self.df[['wavenumber', 'other_desig', 'line_tags']].values.tolist()
         
@@ -347,9 +346,11 @@ class MyFrame(mainWindow):
         self.load_plot_df()         
         self.strans_levs = list(pd.read_csv(self.strans_lev_file, dtype={'parity':float}).transpose().to_dict().values())                 
         self.display_strans_levs() 
+        self.load_lopt_lev_comments()
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
     
     def save_project(self):
+        """Saves the project."""
         self.save_project_config()
         self.save_main_config()
         self.save_df()
@@ -357,31 +358,36 @@ class MyFrame(mainWindow):
         self.save_lev_comments_df()
     
     def save_lev_comments_df(self):
+        """Saves the lopt level comments to the correct pickle file."""
         self.lopt_lev_comments.to_pickle(self.lopt_lev_comments_file) 
-        
+   
     def save_strans_levs(self):
+        """Writes the levels in TAME to the .lev file. This is needed for user changes that have been made within TAME."""
         with open(self.strans_lev_file, 'w') as lev_file:
             lev_file.write('label,j,energy,parity\n')
+            
             for lev in self.strans_levs:
                 lev_file.write(f"{lev['label']},{lev['j']},{lev['energy']},{lev['parity']}\n")
                
     def save_project_config(self):
+        """Save the project config."""        
         with open(self.project_config_file, 'w') as configfile:
             self.project_config.write(configfile)        
         
-    def save_main_config(self):        
+    def save_main_config(self):  
+        """Saves the main TAME config."""
         with open(self.main_config_file, 'w') as configfile:
             self.main_config.write(configfile)
             
     def write_lopt_inp(self):
+        """Writes the LOPT input file. Taking into account user selected tags, uncertainties and multiply identified lines."""
         with open(self.lopt_inp_file, 'w') as inp_file:
             lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()  # create list of all lines with a main designation
 
             if lines == []:  # no lines have a main_designation in self.df ie strans has not been run
                 wx.MessageBox('No lines found for LOPT input. Please run STRANS first', 'No Matched Lines', 
                       wx.OK | wx.ICON_EXCLAMATION)
-                return False
-                
+                return False                
             else:
                 for line in lines:
                     snr = f'{line[1]:9.0f}'
@@ -392,20 +398,21 @@ class MyFrame(mainWindow):
                     user_desig = line[8]
                     tags = line[9] 
                          
-                    if user_desig != '':  # user label for line
-                        upper_level = f'{user_desig["upper_level"]:>11}'
-                        lower_level = f'{user_desig["lower_level"]:>11}'
-                        
-                        if all(value == False for value in tags.values()): # no user defined tags for the line
-                            unc = f'{line[5]:.4f}'
-                        elif tags['user_unc'] != False:
-                            unc = f"{tags['user_unc']:.4f}"
-                        else:
-                            unc = f'{self.lopt_default_unc:.4f}'
-                            tag = '       B'
-                        
-                        lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
-                        inp_file.writelines(lopt_str)
+                    if user_desig != '':  # there is a user selected level for the line
+                        if user_desig['element_name'] == self.main_element_name:  # only if the user selected transition is of the main element
+                            upper_level = f'{user_desig["upper_level"]:>11}'
+                            lower_level = f'{user_desig["lower_level"]:>11}'
+                            
+                            if all(value == False for value in tags.values()): # no user defined tags for the line
+                                unc = f'{line[5]:.4f}'
+                            elif tags['user_unc'] != False:
+                                unc = f"{tags['user_unc']:.4f}"
+                            else:
+                                unc = f'{self.lopt_default_unc:.4f}'
+                                tag = '       B'
+                            
+                            lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
+                            inp_file.writelines(lopt_str)
                         
                     else:  # no user label for line
                         if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
@@ -427,7 +434,8 @@ class MyFrame(mainWindow):
         return True
         
         
-    def write_lopt_par(self):      
+    def write_lopt_par(self):
+        """Gets text from the LOPT .par template file and writes .par file for the project."""
         with open('LOPT/lopt_template.par', 'r') as temp_par_file:
             par_lines = temp_par_file.readlines()
             par_lines[0] = f'{self.main_element_name}_lopt.inp{par_lines[0]}'
@@ -440,6 +448,7 @@ class MyFrame(mainWindow):
             
     
     def write_lopt_fixed(self):
+        """Writes the fixed levels for LOPT. If the ground level is selected, then unc = 0, otherwise = 2.0."""
         with open(self.lopt_fixed_file, 'w') as fixed_file:
             fixed_strings = []
             
@@ -456,11 +465,10 @@ class MyFrame(mainWindow):
             fixed_file.writelines(fixed_strings)    
             
     def get_lopt_output(self):
+        """Gets output from the LOPT output files. Puts these into dataframes. Duplicates lines so that the line appears
+        in the output GroupListView twice - once for each level in the transition."""
         self.lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
-        # print(self.lopt_levs.head)
-        #lopt_levs = list(lopt_levs.transpose().to_dict().values())
         lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
-        # print(lopt_lines_df.columns)
         merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'E1', 'E2', 'L1', 'L2', 'F', 'uncW_o']].sort_values('W_obs'), 
                                      self.df[['wavenumber', 'peak', 'eq width', 'tags']].sort_values('wavenumber'), 
                                      left_on='W_obs', 
@@ -485,42 +493,31 @@ class MyFrame(mainWindow):
         t2['main_level'] = t2['E2'] 
         t2['other_level'] = t2['L1'] 
         
-        # t1 = duplicated_lines.iloc[0::2].copy()
-        # t1['main_level'] = t1['L1']
-        # t1['other_level'] = t1['L2'] 
-        # t2 = duplicated_lines.iloc[1::2].copy()
-        # t2['main_level'] = t2['L2'] 
-        # t2['other_level'] = t2['L1'] 
-        
         duplicated_lines.update(t1)
         duplicated_lines.update(t2)
-           
-        # duplicated_lines.iloc[0::2]['transition'] = duplicated_lines['L1']
-        # duplicated_lines.iloc[1::2]['transition'] = duplicated_lines['L2']
              
         duplicated_lines = list(duplicated_lines.transpose().to_dict().values())
-        # print(duplicated_lines)
-        self.lopt_lev_ojlv.SetObjects(duplicated_lines) 
-        
-        self.lopt_output_lines = duplicated_lines
-        
-        self.load_lopt_lev_comments()  # needs to be done properly
-        
+        self.lopt_lev_ojlv.SetObjects(duplicated_lines)         
+        self.lopt_output_lines = duplicated_lines        
+        # self.load_lopt_lev_comments()    
         
     def load_lopt_lev_comments(self):
-        
+        """Load the comments for each level. If the pkl file is missing - create it"""
         if not os.path.isfile(self.lopt_lev_comments_file):  # if no existing DataFrame is present
             self.lopt_lev_comments = self.lopt_levs[['Designation']].copy()
             self.lopt_lev_comments['Comments'] = ''        
             self.lopt_lev_comments.to_pickle(self.lopt_lev_comments_file) 
         else:
-            # lopt_lev_com_tmp = self.lopt_levs[['Designation']].copy()
-            # lopt_lev_com_tmp['Comments'] = ''  
-            self.lopt_lev_comments = pd.read_pickle(self.lopt_lev_comments_file) 
-            # self.lopt_lev_comments.combine_first(lopt_lev_com_tmp)  # should combine the two dataframes and keep the values from lopt_lev_comments
+            self.lopt_lev_comments = pd.read_pickle(self.lopt_lev_comments_file)
+            # old_lopt_levs = self.lopt_lev_comments['Designation'].values.tolist()        
+            # current_lopt_levs= self.lopt_levs['Designation'].values.tolist()            
+            # new_levs = [{'Designation':x, 'Comments':''} for x in current_lopt_levs if x not in old_lopt_levs]
 
-        
+            # for lev in new_levs:
+            #     self.lopt_lev_comments = self.lopt_lev_comments.append(lev, ignore_index=True)
+      
     def display_lopt_line(self, line):  
+        """Sets values for the various controls and the line plot in the LOPT line panel.""" 
         line_dict = list(line.transpose().to_dict().values()).pop()   
         self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
@@ -566,9 +563,9 @@ class MyFrame(mainWindow):
     def plot_lopt_line(self, wavenumber, peak, width):   
         """Plots the spectra from self.plot_df to the matplotlib plot. There are scaling factors that can be changed to show
         more/less of the plot area."""
-        plot_width = self.lopt_plot_width
+        plot_width = self.lopt_plot_width / 2  # as this is total width
         # plot_y_scale = 1.1
-        plot_x_scale = 5.
+        # plot_x_scale = 5.
         
         self.matplotlib_canvas.clear()  
         ax = self.matplotlib_canvas.gca()   
@@ -576,8 +573,7 @@ class MyFrame(mainWindow):
         # XXX Test to see if below or above is faster
         df_part_1 = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width)]
         df_part = df_part_1.loc[(df_part_1['wavenumber'] > wavenumber-plot_width)]
-        
-        
+                
         spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
         
         for spectra in spectras:
@@ -593,6 +589,7 @@ class MyFrame(mainWindow):
         self.matplotlib_canvas.draw()     
     
     def display_lopt_lev(self, level):
+        """Display info about the LOPT level. Also the user comments."""
         lev_dict = list(level.transpose().to_dict().values()).pop()         
         self.lopt_lev_panel_header.SetLabel(f"Level: {lev_dict['Designation']}")
         self.lopt_level_listctrl.DeleteAllItems()
@@ -616,19 +613,19 @@ class MyFrame(mainWindow):
         
         with wx.EventBlocker(self):  # prevents the textctrl event from firing and writing this value to the df
             self.lopt_level_comments.SetValue(self.lopt_lev_comments.at[self.selected_lev_index, 'Comments']) 
-
         
         self.lopt_level_panel.Show()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
         
     def update_df_cell(self, wavenumber, column, value):
-        """Updates a cell of the main self.df dataframe, specified by wavenumber and column, with value"""   
+        """Updates a cell of the main self.df dataframe, specified by wavenumber and column, with value."""   
         selected_line_index = self.df.loc[self.df['wavenumber'] == wavenumber].index.values[0]
         self.df.at[selected_line_index, column] = value  # just updates a single value
         print(self.df.iloc[selected_line_index])
         
     def get_df_cell(self, wavenumber, column):
+        """Gets the value of a cell in the main self.df dataframe for a given wavenumber and column."""
         selected_line_index = self.df.loc[self.df['wavenumber'] == wavenumber].index.values[0]
         return self.df.at[selected_line_index, column]
     
@@ -653,6 +650,7 @@ class MyFrame(mainWindow):
             return False
         
     def set_fixed_levels(self):
+        """User dialog window for setting the fixed levels for LOPT."""
         fixed_level_dialog = fixedLevels(self)
         
         if fixed_level_dialog.ShowModal() == wx.ID_CANCEL:
@@ -666,6 +664,9 @@ class MyFrame(mainWindow):
     
     
     def export_linelist(self, full_list):
+        """Exports the STRANS output linelist with matched transitions. full_list determines whether only lines with
+        transitions involving the main element are outputted, or the entire linelist is regardless of whether a 
+        transition has been found by STRANS or not."""
         with wx.FileDialog(self, "Export Matched Linelist", wildcard="Linelist Files (*.lin)|*.lin",
                        style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
 
@@ -676,21 +677,20 @@ class MyFrame(mainWindow):
 
             with open(filename, 'w') as file:
                 
-                if full_list:
+                if full_list:  # user has selected that all lines should be in the outputted linelist
                     lines = self.df.values.tolist()
                     linelist_type = 'Complete'
                 else:
                     lines = self.df.loc[self.df.main_desig.str.len() > 0 ].values.tolist()
                     linelist_type = 'Matched'
                     
-                file.writelines('wavenumber,snr,fwhm,eq_width,fit,unc,main_element,other_elements\n') 
+                file.writelines('wavenumber,snr,fwhm,eq_width,fit,unc,main_element,other_elements\n')  # header
                 
                 for line in lines:
                     main_level_string = ''
                     other_level_string = ''
                     
                     for lev_pair in line[6]:
-                        
                         if not main_level_string:
                             sep = ''
                         else:
@@ -698,7 +698,6 @@ class MyFrame(mainWindow):
                         main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
                         
                     for lev_pair in line[7]:
-                        
                         if not other_level_string:
                             sep = ''
                         else:
@@ -721,83 +720,97 @@ class MyFrame(mainWindow):
 
 ### Event-driven functions ###  
 
-    def on_export_lopt_levs(self, event):          
+    def on_export_lopt_levs(self, event):    
+        """Exports a sorted and formatted list of all LOPT levels and their lines."""
         with wx.FileDialog(self, "Export LOPT Sorted Levels", wildcard="Linelist Files (*.llf)|*.llf",
                        style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
-
-            if fileDialog.ShowModal() == wx.ID_CANCEL:
-                return     # the user changed their mind
+            if 'self.lopt_levs' in globals():  # LOPT has been run
+                
+                if fileDialog.ShowModal() == wx.ID_CANCEL:
+                    return     # the user changed their mind
+        
+                filename = fileDialog.GetPath()
+                
+                if filename.split('.')[-1] != 'llf':   #if user types new filename in dialog
+                    filename += '.llf'
+                
+                lopt_levels = list(self.lopt_levs.transpose().to_dict().values())
     
-            filename = fileDialog.GetPath()
+                with open(filename, 'w') as file:
             
-            if filename.split('.')[-1] != 'llf':   #if user types new filename in dialog
-                filename += '.llf'
-            
-            lopt_levels = list(self.lopt_levs.transpose().to_dict().values())
-
-            with open(filename, 'w') as file:
-        
-                for level in lopt_levels: 
-                    file.write('--------------------------------------------\n')
-                    file.write('Config      Energy (cm-1)   D1        D2        D3        No. of Lines  Comments\n')
-                    file.write(f"{level['Designation']:<12}{level['Energy']:<16}{level['D1']:<10}{level['D2']:<10}{level['D3']:<10}{level['N_lines']:<14}{level['Comments']}\n\n")
-                    file.write('   Fit  log(EW) SNR     Wn_Obs (cm-1)  Unc_Wn_obs  del_Wn(Obs-C)  Level       Tags\n')
-                    
-                    lopt_lines = [x for x in self.lopt_output_lines if x['other_level'] == level['Designation']]
-                    
-                    for line in lopt_lines:
-                        if line['star']:
-                            star = '*'
-                        else:
-                            star= ' '
+                    for level in lopt_levels: 
+                        file.write('--------------------------------------------\n')
+                        file.write('Config      Energy (cm-1)   D1        D2        D3        No. of Lines  Comments\n')
+                        file.write(f"{level['Designation']:<12}{level['Energy']:<16}{level['D1']:<10}{level['D2']:<10}{level['D3']:<10}{level['N_lines']:<14}{level['Comments']}\n\n")
+                        file.write('   Fit  log(EW) SNR     Wn_Obs (cm-1)  Unc_Wn_obs  del_Wn(Obs-C)  Level       Tags\n')
                         
-                        if line['L1'] == line['other_level']:
-                            trans_lev = line['L2']
-                        else:
-                            trans_lev = line['L1']
+                        lopt_lines = [x for x in self.lopt_output_lines if x['other_level'] == level['Designation']]
                         
-                        file.write(f"{star:<3}{line['tags']:<5}{line['log_ew']:<8.2f}{line['peak']:<8.0f}{line['wavenumber']:<15.4f}{line['uncW_o']:<12.4f}{line['dWO-C']:>7.4f}        {trans_lev:<12}Tags\n")
-                    
-                    file.write('--------------------------------------------\n')
+                        for line in lopt_lines:
+                            if line['star']:
+                                star = '*'
+                            else:
+                                star= ' '
+                            
+                            if line['L1'] == line['other_level']:
+                                trans_lev = line['L2']
+                            else:
+                                trans_lev = line['L1']
+                            
+                            file.write(f"{star:<3}{line['tags']:<5}{line['log_ew']:<8.2f}{line['peak']:<8.0f}{line['wavenumber']:<15.4f}{line['uncW_o']:<12.4f}{line['dWO-C']:>7.4f}        {trans_lev:<12}Tags\n")
+                        
+                        file.write('--------------------------------------------\n')
+            else:
+                wx.MessageBox('No levels found from LOPT output. Please run LOPT first', 'No Levels Found', 
+                              wx.OK | wx.ICON_EXCLAMATION)
         
-        
-
     def on_preferences(self, event):
+        """Display TAME preferences dialog and set global variables accordingly."""
         self.prop_dialog = preferenceDialog(self)
         
         if self.prop_dialog.ShowModal() == wx.ID_OK:
-            self.strans_wn_discrim = self.prop_dialog.strans_wn_discrim.GetValue()
-            self.star_discrim = self.prop_dialog.lopt_delwn_discrim.GetValue()
-            self.lopt_plot_width = self.prop_dialog.lopt_plot_width.GetValue()  
-
+            self.strans_wn_discrim = float(self.prop_dialog.strans_wn_discrim.GetValue())
+            self.star_discrim = float(self.prop_dialog.lopt_delwn_discrim.GetValue())
+            self.lopt_plot_width = float(self.prop_dialog.lopt_plot_width.GetValue()) 
+            
+            self.project_config.set('lopt', 'star_discrim', str(self.star_discrim))
+            self.project_config.set('lopt', 'plot_width', str(self.lopt_plot_width))
+            self.project_config.set('lopt', 'wn_discrim', str(self.strans_wn_discrim))
+                       
     def on_lopt_lev_comments(self, event):
+        """Updates the lopt_lev_comments df with the user entered comments."""
         text = self.lopt_level_comments.GetValue()   
         self.lopt_lev_comments.at[self.selected_lev_index, 'Comments'] = text  # updates level with the comments
 
     def on_lopt_line_comments(self, event):
+        """Updates the main df with the user entered comments."""
         text = self.lopt_line_comments_txtctrl.GetValue()
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
         self.update_df_cell(selected_wn, 'comments', text)
 
-    def on_ringing_tag(self, event):      
+    def on_ringing_tag(self, event):   
+        """Updates the main df with the user selected tag."""
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
         line_tags = self.get_df_cell(selected_wn, 'line_tags')
         line_tags['ringing'] = self.ringing_chkbox.GetValue()
         self.update_df_cell(selected_wn, 'line_tags', line_tags)
 
-    def on_noise_tag(self, event):  
+    def on_noise_tag(self, event): 
+        """Updates the main df with the user selected tag.""" 
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
         line_tags = self.get_df_cell(selected_wn, 'line_tags')
         line_tags['noise'] = self.noise_chkbox.GetValue()
         self.update_df_cell(selected_wn, 'line_tags', line_tags)
 
     def on_blend_tag(self, event):  
+        """Updates the main df with the user selected tag."""
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
         line_tags = self.get_df_cell(selected_wn, 'line_tags')
         line_tags['blend'] = self.blend_chkbox.GetValue()
         self.update_df_cell(selected_wn, 'line_tags', line_tags)
 
-    def on_user_unc_tag(self, event): 
+    def on_user_unc_tag(self, event):
+        """Updates the main df with the user selected tag and its uncertainty."""
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
         line_tags = self.get_df_cell(selected_wn, 'line_tags')
         
@@ -816,9 +829,9 @@ class MyFrame(mainWindow):
             line_tags['user_unc'] = False
         
         self.update_df_cell(selected_wn, 'line_tags', line_tags)
-
-
+        
     def on_lopt_trans_checked(self, event): 
+        """Updates the main df with the user selected line transition."""
         user_desig = {}        
         line_index = event.GetIndex()
         
@@ -835,22 +848,26 @@ class MyFrame(mainWindow):
         self.update_df_cell(selected_wn, 'user_desig', user_desig)
 
     def on_lopt_trans_unchecked(self, event):
+        """Updates the main df with the user selected tag."""
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']       
         self.update_df_cell(selected_wn, 'user_desig', '')
 
-    def on_partial_strans(self, event):  # Run >> Strans(partial)
+    def on_partial_strans(self, event):
+        """Runs STRANS only for the main element. Could save user time for large numbers of impurity files, that do
+        not change between STRANS runs."""
         if self.main_strans(self.strans_levs):  # if strans ran succesfully
             self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
             self.frame_statusbar.SetStatusText('Strans Complete')
         
     def on_full_strans(self, event):  
+        """Runs STRANS for all elements."""
         if self.main_strans(self.strans_levs): # if strans ran succesfully
             self.other_strans(self.other_lev_list)
             self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
             self.frame_statusbar.SetStatusText('Strans Complete')
            
     def on_strans_del(self, event):  
-        """Delete levels from self.strans_lev_file. This will be a permanent change."""
+        """Delete levels from self.strans_lev_file. This will be a permanent change when saved by user."""
         selected_levs = self.strans_lev_ojlv.GetSelectedObjects()
         
         if selected_levs:  # if selection not empty
@@ -861,18 +878,14 @@ class MyFrame(mainWindow):
                 message = f'Are you sure you want to delete these {len(selected_levs)} levels?'
                 title = 'Delete Levels?'
         
-            if wx.MessageBox(message, title, 
-                          wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:
-                
-    
+            if wx.MessageBox(message, title, wx.YES_NO | wx.NO_DEFAULT | wx.ICON_EXCLAMATION) == wx.YES:                  
                 self.strans_levs = [x for x in self.strans_levs if x not in selected_levs]            
                 self.display_strans_levs()
-                
-                # XXX will need to add a corresponding part in save to write these values back out to the strans file.               
             else:
                 return
             
     def on_strans_add(self, event):  
+        """Add a blank line to the STRANS input levels and display it."""
         self.strans_levs.insert(0, {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0})  # inserts blank line at head of the table
         self.display_strans_levs()
         
@@ -880,40 +893,54 @@ class MyFrame(mainWindow):
         print("Event handler 'on_strans_save' not implemented!")
         event.Skip()
         
-    def on_strans_lev_edit(self, event):  
+    def on_start_strans_lev_edit(self, event):
+        """Triggers when a user double clicks a cell. Keeps previous cell value so dfs can be updated."""
+        self.edited_cell_prev_value = event.cellValue    
+    
+    def on_finish_strans_lev_edit(self, event):  
+        """Update the strans_levs list and lopt_lev_comments with user changes. Updates comment df if the user changes
+        the designation of a level or creates a new row if a new level is added."""
+        if not self.is_float(self.edited_cell_prev_value):  # is the level designation (as all other values are floats)
+            new_desig = self.strans_lev_ojlv.GetLastEditedObject()['label'] 
+            
+            try:  # this will work if the level being edited is in self.lopt_lev_comments
+                selected_line_index = self.lopt_lev_comments.loc[self.lopt_lev_comments['Designation'] == self.edited_cell_prev_value].index.values[0]
+                self.lopt_lev_comments.at[selected_line_index, 'Designation'] = new_desig # just updates a single value
+            except IndexError:  # a newly added level has been edited by the user
+                self.lopt_lev_comments = self.lopt_lev_comments.append({'Designation': new_desig, 'Comments': ''}, ignore_index=True)
+        
         self.strans_levs = self.strans_lev_ojlv.GetObjects()  # updates the edited cells to strans_levs
             
     def on_export_matched_linelist(self, event):
+        """Export matched linelist."""
         self.export_linelist(False)  # export only matched linelist
 
     def on_export_full_linelist(self, event):
+        """Export full linelist."""
         self.export_linelist(True)  # export complete linelist                
                 
-    def on_Open(self, event):  # File >> Open
-    
+    def on_Open(self, event):
+        """Opens user selected project and loads all variables and dataframes."""
         if self.project_loaded:
             save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
                                      wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
-        
             if save_dlg == wx.ID_YES:
                 self.save_project()
             elif save_dlg == wx.ID_CANCEL:
                 return
-
         
         with wx.FileDialog(self, "Open TAME project file", wildcard="project files (*.ini)|*.ini",
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
-
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return     # the user changed their mind
     
             self.project_config_file = fileDialog.GetPath()
+            
             try:
                 self.load_project()
                 self.main_config.set('project', 'project_config', self.project_config_file)
                 self.save_main_config()
-                self.frame_statusbar.SetStatusText('Project loaded successfully')
-                
+                self.frame_statusbar.SetStatusText('Project loaded successfully')   
             except ValueError:  # XXX need to change this back to generic error - or better yet - to just the specific one
                 wx.MessageBox('Unsupported or out of date .ini file. Please select a valid TAME project file.', 'Unsupported File', 
                       wx.OK | wx.ICON_EXCLAMATION)    
@@ -941,15 +968,13 @@ class MyFrame(mainWindow):
         # self.df_file = self.project_config.get('files', 'df_file')
       
         # self.project_title = self.project_config.get('tame', 'project_title').strip("'")
-                        
-            
-                
+                                  
     def on_edit_fixed_levels(self, event):
+        """Make changes to user defined fixed levels."""
         self.set_fixed_levels()          
     
     def on_lopt(self, event):
-        """Create/update all neccessary files for LOPT input and then call LOPT"""
-        
+        """Create/update all neccessary files for LOPT input and then call LOPT"""        
         if self.lopt_fixed_levels == [''] or self.lopt_fixed_levels == []:  # no fixed levels have been selected
             if not self.set_fixed_levels():  # if cancel button pressed on fixed level dialog
                 return
@@ -958,21 +983,19 @@ class MyFrame(mainWindow):
         
         if self.write_lopt_inp():  # if there are lines in the strans linelist
             self.write_lopt_par()
-            self.write_lopt_fixed()
-            
+            self.write_lopt_fixed()            
             self.frame_statusbar.SetStatusText('Running LOPT...')   
             
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-                print(p)
+                # print(p)
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
                 
                 self.get_lopt_output()
                 self.main_panel.ChangeSelection(1)  # changes the notebook tab to LOPT
-            except FileNotFoundError as fnf:
-                
+            except FileNotFoundError as fnf:                
                 if 'java' in str(fnf):
                     self.frame_statusbar.SetStatusText('LOPT error') 
                     wx.MessageBox('Java Runtime Environment (JRE) is not installed on this machine. \n\nPlease install and restart TAME.', 'Missing Java runtime', 
@@ -985,11 +1008,12 @@ class MyFrame(mainWindow):
             self.frame_statusbar.SetStatusText('Run STRANS first') 
                         
     def on_Save(self, event):  
+        """Saves all user changes for the project."""
         self.save_project()
         self.frame_statusbar.SetStatusText('Project saved')                   
         
-    def on_Exit(self, event):  # File >> Exit
-    
+    def on_Exit(self, event):  
+        """Exits TAME after ensuring changes have been saved if user wanted them to be."""    
         if self.project_loaded:
             save_dlg = wx.MessageBox(f'Do you want to save changes to {self.project_title}', 'Save Changes?', 
                                      wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_INFORMATION)
@@ -1003,10 +1027,10 @@ class MyFrame(mainWindow):
         self.Destroy()
         
     def on_click_lopt_levs(self, event):  
+        """Event for user selecting a line,level or blank line in the LOPT GroupListView."""
         try:
             selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
-            selected_line = self.df.loc[self.df['wavenumber'] == selected_wn]  
-            
+            selected_line = self.df.loc[self.df['wavenumber'] == selected_wn]              
             self.display_lopt_line(selected_line)
 
         except TypeError: # group header or blank row selected
@@ -1014,9 +1038,7 @@ class MyFrame(mainWindow):
             
             if not next_row == None:  # group header selected and not the blank line above it         
                 next_row_lev = next_row['main_level']
-                # print(next_row_lev)
-                selected_lev = self.lopt_levs.loc[self.lopt_levs['Energy'] == next_row_lev]
-                
+                selected_lev = self.lopt_levs.loc[self.lopt_levs['Energy'] == next_row_lev]                
                 self.display_lopt_lev(selected_lev)    
             else:
                 self.lopt_level_panel.Hide()
@@ -1028,16 +1050,17 @@ class MyFrame(mainWindow):
             self.lopt_line_panel.Hide()
             self.sizer_8.Layout()
                   
-        
     def on_col_clicked(self, event):  
         #self.lopt_lev_ojlv.SortBy(1)
         # self.lopt_lev_ojlv.RebuildGroups()
         event.Skip()
         
     def on_strans_lev_search(self, event):
+        """User has entered text to search the STRANS levs for."""
         self.search_listview(event, self.strans_lev_ojlv)
         
-    def on_strans_line_search(self, event):  
+    def on_strans_line_search(self, event): 
+        """User has entered text to search the STRANS lines for."""
         search_bar = event.GetEventObject()
         try:
             self.search_listview(event, self.strans_lines_ojlv)
@@ -1047,6 +1070,7 @@ class MyFrame(mainWindow):
             search_bar.SetBackgroundColour(wx.RED)
             
     def on_New(self, event):  
+        """Opens new project dialog and sets all variables and creates all needed files for a new project."""
         self.new_proj = newProject(self)
         self.new_proj.ShowModal()  
         
@@ -1065,13 +1089,10 @@ class MyFrame(mainWindow):
             other_lev_files = ''
             for file in self.new_proj.other_element_lev_files:
                 other_lev_files += f'{file["shortname"]},{file["filename"]}\n'
-            self.new_config.set('files', 'other_lev_files', other_lev_files)
-            
+            self.new_config.set('files', 'other_lev_files', other_lev_files)            
             self.new_config.set('tame', 'project_title', self.new_proj.project_name)
-            self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)
-            
-            self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels for new project
-            
+            self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)            
+            self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels for new project            
             self.new_config_file = self.new_proj.project_file_name + '.ini'
             
             with open(self.new_config_file, 'w') as configfile:
@@ -1084,6 +1105,7 @@ class MyFrame(mainWindow):
             event.Skip()
   
     def on_about(self, event):  
+        """Displays the about dialog."""
         description = """
         Here is the long description about what TAME is and what is does.
         
@@ -1092,8 +1114,7 @@ class MyFrame(mainWindow):
         There should be a not to read the manual for more info
         
         Maybe contact info for me here as well.
-        """
-        
+        """     
         aboutInfo = wx.adv.AboutDialogInfo()
         aboutInfo.SetName("Term Analysis Made Easy (TAME)")
         aboutInfo.SetVersion(TAME_VERSION_STRING)
@@ -1101,15 +1122,13 @@ class MyFrame(mainWindow):
         aboutInfo.SetCopyright("(C) 2021")
         aboutInfo.SetWebSite("http:#myapp.org")
         aboutInfo.AddDeveloper("Christian Clear")
-        
         wx.adv.AboutBox(aboutInfo)
-  
-    
-  
-    
+ 
   
 class fixedLevels(fixedLevelsDialog):
+    """Dialog class for the fixed level selection."""
     def __init__(self, *args, **kwds):
+        """Initilise and set the checkboxes of the current fixed levels."""
         fixedLevelsDialog.__init__(self, *args, **kwds)  
         self.fixed_levels = [x for x in self.GetParent().lopt_fixed_levels if x != '']
         self.fixed_level_lc.EnableCheckBoxes(True)
@@ -1120,29 +1139,29 @@ class fixedLevels(fixedLevelsDialog):
             self.fixed_level_lc.Append([level['label'], f"{level['energy']:.4f}"])
 
         ticked_lev_idx = [strans_levs.index(x) for x in strans_levs if x['label'] in self.fixed_levels]
-        
         with wx.EventBlocker(self):  # stops item checked event from firing
             for idx in ticked_lev_idx:
                 self.fixed_level_lc.CheckItem(idx)            
             
     def on_fixed_lev_checked(self, event):
+        """User has checked the checkbox of a level. Update fixed_levels"""
         level = self.fixed_level_lc.GetItem(event.GetIndex(), 0).GetText()
         self.fixed_levels.append(level)
                
     def on_fixed_lev_unchecked(self, event):
+        """User has unhecked the checkbox of a level. Update fixed_levels"""
         level = self.fixed_level_lc.GetItem(event.GetIndex(), 0).GetText()
         self.fixed_levels = [x for x in self.fixed_levels if x != level]
     
-    def on_fixed_lev_ok(self, event):  
+    def on_fixed_lev_ok(self, event):
+        """User has clicked OK button. Check that at least one level has been selected to be fixed."""
         if self.fixed_levels == ['']:  # no fixed level(s) selected
             wx.MessageBox('At least one level must be fixed.', 'Fixed Level Error', 
                           wx.OK | wx.ICON_EXCLAMATION)
         else:
             self.EndModal(wx.ID_OK)
             
-        
-    
-              
+             
 class newProject(newProjectDialog):
     def __init__(self, *args, **kwds):
         newProjectDialog.__init__(self, *args, **kwds)
@@ -1165,8 +1184,7 @@ class newProject(newProjectDialog):
 
                 
             self.project_path = fileDialog.GetPath() + '/'
-            self.project_path_tc.SetValue(str(self.project_path))
-            
+            self.project_path_tc.SetValue(str(self.project_path))   
         
     def on_main_lev_file_btn(self, event):
         with wx.FileDialog(self, "Select Main Element Level File", wildcard="level files (*.lev)|*.lev",
@@ -1273,14 +1291,7 @@ class preferenceDialog(propertiesDialog):
             wx.MessageBox('This field must be a number', 'Incorrect Parameter', 
                           wx.OK | wx.ICON_EXCLAMATION)
             self.lopt_plot_width.SetValue(f'{self.parent.strans_wn_discrim}')
-
-    def on_ok(self, event):  # wxGlade: propertiesDialog.<event_handler>
-        print("Event handler 'on_ok' not implemented!")
-        event.Skip()
-        
-    
-
-            
+         
         
 class KeyList(object):
     """Key function for bisect search. This allows bisect to work on specific elements within lists of iterable objects"""
