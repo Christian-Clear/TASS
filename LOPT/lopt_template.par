@@ -22,9 +22,9 @@ Y       ; Divide levels into independent groups (Y/N)?
   1000  ;1st column of line WEIGHT in the transitions-input file
   1000  ;LAST column of line WEIGHT in the transitions-input file
 39      ;1st column of LOWER LEVEL LABEL in the transitions-input file
-48      ;LAST column of LOWER LEVEL LABEL in the transitions-input file
-50      ;1st column of UPPER level LABEL in the transitions-input file (width must be same as for lower level)
-65      ;1st column for LINE FLAGS (B=blend,Q=questionable,M=masked,P=predicted,A=air wavelength,V=vacuum wavelength; width=5 chars; CORRELATION GROUP No. is entered here!)
+49      ;LAST column of LOWER LEVEL LABEL in the transitions-input file
+51      ;1st column of UPPER level LABEL in the transitions-input file (width must be same as for lower level)
+66      ;1st column for LINE FLAGS (B=blend,Q=questionable,M=masked,P=predicted,A=air wavelength,V=vacuum wavelength; width=5 chars; CORRELATION GROUP No. is entered here!)
 Y       ; tab-delimited output [Y/N] ?
 N	; round input lines [Y/N]?
 ----------------------------------------------------------------------------

@@ -65,8 +65,7 @@ class MyFrame(mainWindow):
         self.strans_lev_ojlv.cellEditMode = self.strans_lev_ojlv.CELLEDIT_DOUBLECLICK
         self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_finish_strans_lev_edit)
         self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_STARTING, self.on_start_strans_lev_edit)
-        
-        
+                
         self.strans_lines_ojlv.SetColumns([
             ColumnDefn(f'Wavenumber ({self.cm_1})', 'left', 150, 'wavenumber', stringConverter="%.4f"),
             ColumnDefn('SNR', 'left', 40, 'peak', stringConverter="%d"),
@@ -94,8 +93,7 @@ class MyFrame(mainWindow):
         
         self.lopt_lev_ojlv.SetEmptyListMsg("Run LOPT first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
-        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)
-        
+        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)        
         self.lopt_line_listctrl.EnableCheckBoxes(True)
 
     ### String/Group Converters for Object and Group Listviews #################
@@ -164,8 +162,7 @@ class MyFrame(mainWindow):
     def display_strans_levs(self):
         """Writes values from a list to the strans_lev_ojlv ObjectListView"""
         self.strans_lev_ojlv.SetObjects(self.strans_levs)
-
-            
+       
     def display_strans_lines(self):
         """Writes lines with designations from self.df to the strans_lines_ojlv ObjectListView"""   
         strans_lines = list(self.df.loc[self.df.main_desig.str.len() > 0 ].transpose().to_dict().values())  # convert to list of dicts
@@ -191,8 +188,7 @@ class MyFrame(mainWindow):
             line['main_desig'] = main_level_string
             line['other_desig'] = other_level_string
             
-        self.strans_lines_ojlv.SetObjects(strans_lines)
-                    
+        self.strans_lines_ojlv.SetObjects(strans_lines)             
     
     def create_df(self, lines_file):
         """Creates a new pandas DataFrame from a list of lines in 'lines_file' and saves to a pickle file."""
@@ -204,7 +200,6 @@ class MyFrame(mainWindow):
         self.df['comments'] = ''
         self.save_df()
         
-    
     def save_df(self):
         """Saves the main pandas DataFrame self.df to the pickle file."""
         self.df.to_pickle(self.df_file)    
@@ -217,6 +212,12 @@ class MyFrame(mainWindow):
                           wx.OK | wx.ICON_EXCLAMATION)
             self.frame_statusbar.SetStatusText('')
             return False
+        
+        if not all(len(label) <= 10 for label in [lev['label'] for lev in strans_levs]):
+            wx.MessageBox('One or more level labels are too long. The maximum label length is 10 characters. \n\nPlease edit or delete these before running STRANS.', 'Level Label(s) Too Long', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.frame_statusbar.SetStatusText('')
+            return False
                      
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in main_desig column with empty lists
         desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()
@@ -225,8 +226,7 @@ class MyFrame(mainWindow):
         self.df.update(matched_lines)  
         self.display_strans_lines()
 
-        return True
-        
+        return True    
         
     def other_strans(self, other_lev_list):
         """Runs strans for all other elements that could be present in the linelist"""                     
@@ -241,7 +241,6 @@ class MyFrame(mainWindow):
         self.df.update(matched_lines)  
         self.display_strans_lines()
 
-  
     def strans(self, strans_levs, desig_list, element_name):
         """Creates list of all possible transitions between levels of opposite parity that obey
         the J selection rule. The list is then compared to all lines in the self.db database and lines with 
@@ -291,7 +290,6 @@ class MyFrame(mainWindow):
         
         return desig_list
         
-
     def load_main_config(self):
         """Reads the main TAME config file and sets variables accordingly"""
         self.main_config_file = 'tame.ini'
@@ -300,14 +298,12 @@ class MyFrame(mainWindow):
         
         self.project_config_file = self.main_config.get('project', 'project_config')
         self.lopt_default_unc = self.main_config.getfloat('lopt', 'default_unc')
-        
-        
+         
     def load_project_config(self):
         """Reads the project config file and sets variables accordingly"""
         self.project_config = configparser.ConfigParser()
         self.project_config.read(self.project_config_file)
 
-        
         self.strans_lev_file = self.project_config.get('files', 'strans_lev_file')
         self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
         self.df_file = self.project_config.get('files', 'df_file')
@@ -323,8 +319,7 @@ class MyFrame(mainWindow):
       
         self.main_element_name = self.project_config.get('tame', 'main_element_name').strip("'")        
         self.project_title = self.project_config.get('tame', 'project_title').strip("'")
-    
-    
+     
     def load_df(self):
         """Loads the main lines df from file. Creates a new df if this is a new project."""
         if not os.path.isfile(self.df_file):  # if no existing DataFrame is present
@@ -400,8 +395,8 @@ class MyFrame(mainWindow):
                          
                     if user_desig != '':  # there is a user selected level for the line
                         if user_desig['element_name'] == self.main_element_name:  # only if the user selected transition is of the main element
-                            upper_level = f'{user_desig["upper_level"]:>11}'
-                            lower_level = f'{user_desig["lower_level"]:>11}'
+                            upper_level = f'{user_desig["upper_level"]:>12}'
+                            lower_level = f'{user_desig["lower_level"]:>12}'
                             
                             if all(value == False for value in tags.values()): # no user defined tags for the line
                                 unc = f'{line[5]:.4f}'
@@ -426,14 +421,13 @@ class MyFrame(mainWindow):
                             tag = '       B'
                             
                         for desig in main_desigs:
-                            upper_level = f'{desig["upper_level"]:>11}'
-                            lower_level = f'{desig["lower_level"]:>11}'
+                            upper_level = f'{desig["upper_level"]:>12}'
+                            lower_level = f'{desig["lower_level"]:>12}'
                         
                             lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
                             inp_file.writelines(lopt_str)
         return True
-        
-        
+               
     def write_lopt_par(self):
         """Gets text from the LOPT .par template file and writes .par file for the project."""
         with open('LOPT/lopt_template.par', 'r') as temp_par_file:
@@ -445,8 +439,7 @@ class MyFrame(mainWindow):
             
         with open(self.lopt_par_file, 'w') as par_file:
             par_file.writelines(par_lines)
-            
-    
+                
     def write_lopt_fixed(self):
         """Writes the fixed levels for LOPT. If the ground level is selected, then unc = 0, otherwise = 2.0."""
         with open(self.lopt_fixed_file, 'w') as fixed_file:
@@ -502,10 +495,11 @@ class MyFrame(mainWindow):
         # self.load_lopt_lev_comments()    
         
     def load_lopt_lev_comments(self):
-        """Load the comments for each level. If the pkl file is missing - create it"""
+        """Load the comments for each level. If the pkl file is missing - create it from the strans levels"""        
         if not os.path.isfile(self.lopt_lev_comments_file):  # if no existing DataFrame is present
-            self.lopt_lev_comments = self.lopt_levs[['Designation']].copy()
-            self.lopt_lev_comments['Comments'] = ''        
+            strans_desigs = [lev['label'] for lev in self.strans_levs]
+            self.lopt_lev_comments = pd.DataFrame(strans_desigs, columns=['Designation'])
+            self.lopt_lev_comments['Comments'] = ''
             self.lopt_lev_comments.to_pickle(self.lopt_lev_comments_file) 
         else:
             self.lopt_lev_comments = pd.read_pickle(self.lopt_lev_comments_file)
@@ -627,8 +621,7 @@ class MyFrame(mainWindow):
     def get_df_cell(self, wavenumber, column):
         """Gets the value of a cell in the main self.df dataframe for a given wavenumber and column."""
         selected_line_index = self.df.loc[self.df['wavenumber'] == wavenumber].index.values[0]
-        return self.df.at[selected_line_index, column]
-    
+        return self.df.at[selected_line_index, column]    
 
     def search_listview(self, event, listview):
         """Searches the primary column of the listview with the string typed into the search ctrl. If the entered
@@ -661,8 +654,7 @@ class MyFrame(mainWindow):
         self.project_config.set('lopt', 'fixed_levels', level_config_string)
         
         return True
-    
-    
+       
     def export_linelist(self, full_list):
         """Exports the STRANS output linelist with matched transitions. full_list determines whether only lines with
         transitions involving the main element are outputted, or the entire linelist is regardless of whether a 
@@ -716,8 +708,6 @@ class MyFrame(mainWindow):
                     
         self.frame_statusbar.SetStatusText(f'{linelist_type} linelist exported to {filename}')   
         
-        
-
 ### Event-driven functions ###  
 
     def on_export_lopt_levs(self, event):    
@@ -856,14 +846,14 @@ class MyFrame(mainWindow):
         """Runs STRANS only for the main element. Could save user time for large numbers of impurity files, that do
         not change between STRANS runs."""
         if self.main_strans(self.strans_levs):  # if strans ran succesfully
-            self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
+            self.main_panel.ChangeSelection(0)  # changes the notebook tab to STRANS
             self.frame_statusbar.SetStatusText('Strans Complete')
         
     def on_full_strans(self, event):  
         """Runs STRANS for all elements."""
         if self.main_strans(self.strans_levs): # if strans ran succesfully
             self.other_strans(self.other_lev_list)
-            self.main_panel.ChangeSelection(0)  # changes the notebook tab to LOPT
+            self.main_panel.ChangeSelection(0)  # changes the notebook tab to STRANS
             self.frame_statusbar.SetStatusText('Strans Complete')
            
     def on_strans_del(self, event):  
@@ -988,7 +978,7 @@ class MyFrame(mainWindow):
             
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-                # print(p)
+                print(p)
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
@@ -1100,6 +1090,17 @@ class MyFrame(mainWindow):
                 
             self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in self.new_proj.plot_files], ignore_index=True)
             self.plot_df.to_pickle(self.plot_df_file) 
+            
+            self.project_config_file = self.new_config_file
+            
+            self.main_config.set('project', 'project_config', self.project_config_file)
+            self.save_main_config()
+            
+            self.load_project()          
+            self.frame_statusbar.SetStatusText('New project created successfully')
+            self.strans_lines_ojlv.DeleteAllItems()
+            self.lopt_lev_ojlv.DeleteAllItems()
+            self.main_panel.ChangeSelection(0)
             
         except AttributeError:  # if the user cancelled the new project process.
             event.Skip()
