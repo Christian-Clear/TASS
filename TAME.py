@@ -12,6 +12,7 @@ import configparser
 import subprocess
 from ObjectListView import ColumnDefn, OLVEvent
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg as NavigationToolbar
+from shutil import copy
 
 import warnings  # only here to stop deprecation warning of objectlistview from clogging up terminal
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -365,9 +366,12 @@ class MyFrame(mainWindow):
                 lev_file.write(f"{lev['label']},{lev['j']},{lev['energy']},{lev['parity']}\n")
                
     def save_project_config(self):
-        """Save the project config."""        
+        """Save the project config."""  
+        print(self.project_config_file)
         with open(self.project_config_file, 'w') as configfile:
-            self.project_config.write(configfile)        
+            self.project_config.write(configfile)
+                                      
+        print('project config saved')
         
     def save_main_config(self):  
         """Saves the main TAME config."""
@@ -935,29 +939,48 @@ class MyFrame(mainWindow):
                 wx.MessageBox('Unsupported or out of date .ini file. Please select a valid TAME project file.', 'Unsupported File', 
                       wx.OK | wx.ICON_EXCLAMATION)    
                 
-    # def on_Save_As(self, event):  
+    def on_Save_As(self, event):  
+        """Save current project as a separate new project, copying releveant files and updating the project and main
+        config files."""
+        with wx.FileDialog(self, "Save TAME project as", wildcard="project file (*.ini)|*.ini",
+                        style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT) as fileDialog:
 
-        # with wx.FileDialog(self, "Save TAME project as", wildcard="project file (*.ini)|*.ini",
-        #                 style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT) as fileDialog:
-
-        #     if fileDialog.ShowModal() == wx.ID_CANCEL:
-        #         return     # the user changed their mind
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return     # the user changed their mind
+                       
+            sa_folder, project_title = os.path.split(fileDialog.GetPath())
+            sa_folder += '/'
+            project_file = project_title.replace(' ', '_')
             
-        #     sa_file = fileDialog.GetPath()
-        #     sa_folder = os.path.dirname(sa_file)
-            
-        #     if sa_file.split('.')[-1] != 'ini':   #if user types new filename in dialog
-        #         sa_file += '.ini'
-        # print(self.project_config_file)
+            if project_title.split('.')[-1] != 'ini':   #if user types new filename in dialog
+                sa_ini_file = project_file + '.ini'
                 
-            
-        # self.project_config_file = sa_file
+        sa_project_config_file =  sa_folder + sa_ini_file      
+        sa_strans_lev_file = sa_folder + project_file + '_input.lev'
+        sa_strans_lin_file = sa_folder + project_file + '_input.lin'
+        sa_main_df_file = sa_folder + project_file + '.pkl'
+        sa_plot_df_file = sa_folder + project_file + '_plot.pkl'
+        sa_lev_comments_file = sa_folder + project_file + '_lev_comments.pkl'
         
-        # self.strans_lev_file = self.project_config.get('files', 'strans_lev_file')
-        # self.strans_lin_file = self.project_config.get('files', 'strans_lin_file')
-        # self.df_file = self.project_config.get('files', 'df_file')
-      
-        # self.project_title = self.project_config.get('tame', 'project_title').strip("'")
+        copy(self.project_config_file, sa_project_config_file)
+        copy(self.strans_lev_file, sa_strans_lev_file)
+        copy(self.strans_lin_file, sa_strans_lin_file)
+        copy(self.df_file, sa_main_df_file)
+        copy(self.plot_df_file, sa_plot_df_file)
+        copy(self.lopt_lev_comments_file, sa_lev_comments_file)
+        
+        self.project_config.set('files', 'strans_lev_file', sa_strans_lev_file)
+        self.project_config.set('files', 'strans_lin_file',sa_strans_lin_file)
+        self.project_config.set('files', 'df_file',sa_main_df_file)
+        self.project_config.set('files', 'plot_file',sa_plot_df_file)
+        self.project_config.set('files', 'lopt_lev_comments_file',sa_lev_comments_file)
+        self.project_config.set('tame', 'project_title', project_title)
+        
+        self.main_config.set('project', 'project_config', sa_project_config_file)
+        
+        self.project_config_file = sa_project_config_file
+        self.save_project()
+        self.load_project()
                                   
     def on_edit_fixed_levels(self, event):
         """Make changes to user defined fixed levels."""
@@ -978,7 +1001,7 @@ class MyFrame(mainWindow):
             
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='LOPT/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-                print(p)
+                # print(p)
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
@@ -1108,21 +1131,19 @@ class MyFrame(mainWindow):
     def on_about(self, event):  
         """Displays the about dialog."""
         description = """
-        Here is the long description about what TAME is and what is does.
+        Term Analysis Made Easy (TAME) is designed to make the process of term analysis more user-friendly and promote the standardised storage and transfer of project files.
         
-        I should include the relevent files it draws from etc.
+        TAME uses a new implementation of the STRANS code (and has retained the name for historical reasons) to find matching lines in a linelist from a list of user-supplied energy levels. These matched lines are passed to the least-squares optimisation program (LOPT) to calculate optimised energy levels.
         
-        There should be a not to read the manual for more info
-        
-        Maybe contact info for me here as well.
+        To download the latest TAME version or submit bug reports and improvement suggestions, please visit the project homepage. 
         """     
         aboutInfo = wx.adv.AboutDialogInfo()
         aboutInfo.SetName("Term Analysis Made Easy (TAME)")
         aboutInfo.SetVersion(TAME_VERSION_STRING)
         aboutInfo.SetDescription(description)
         aboutInfo.SetCopyright("(C) 2021")
-        aboutInfo.SetWebSite("http:#myapp.org")
-        aboutInfo.AddDeveloper("Christian Clear")
+        aboutInfo.SetWebSite("https://github.com/Christian-Clear/TASS")
+        aboutInfo.AddDeveloper("TAME: Christian Clear \nLOPT: Alexander Kramida")
         wx.adv.AboutBox(aboutInfo)
  
   
