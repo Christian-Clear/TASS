@@ -137,7 +137,12 @@ class MyFrame(mainWindow):
         """Correct formatting for virtual lines."""
         if str(tag) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return ''
-        return tag.upper()
+        elif tag == 'b':
+            return 'B'
+        elif tag == 'Q':
+            return 'M'
+        else:
+            return tag.upper()
     
     def neg_num_str(self, diff):
         """Convert diff to 4 d.p. float and make it right alinged. Means that negative numbers aren't shifted to the right."""
@@ -410,12 +415,13 @@ class MyFrame(mainWindow):
                                 unc = f'{self.lopt_default_unc:.4f}'
                                 tag = '       B'
                             
-                            lopt_str = f'{snr}{wn} cm-1 {unc}{upper_level}{lower_level}{tag}\n'
+                            lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
                             inp_file.writelines(lopt_str)
                         
                     else:  # no user label for line
                         if len(main_desigs) != 1 or len(other_desigs) !=0:  # multiple identifications for line
                             unc = f'{self.lopt_default_unc:.4f}'
+                            tag = '       Q'
                         elif all(value == False for value in tags.values()): # no user defined tags for the line
                             unc = f'{line[5]:.4f}'
                         elif tags['user_unc'] != False:
@@ -474,7 +480,7 @@ class MyFrame(mainWindow):
                                      direction='nearest') # match lopt lines to main df file based on nearest wavenumber
         
         merged_lines['dWO-C'] = merged_lines['W_obs'] - merged_lines['Wn_c']
-        merged_lines['star'] = np.where(((merged_lines['dWO-C'].abs()*self.star_discrim) > merged_lines['uncW_o']), True, False)
+        merged_lines['star'] = np.where((merged_lines['dWO-C'].abs() > (merged_lines['uncW_o']*self.star_discrim)), True, False)
         merged_lines['log_ew'] = np.log(merged_lines['eq width'])
         merged_lines['main_level'] = ''
         merged_lines['other_level'] = ''
@@ -516,7 +522,7 @@ class MyFrame(mainWindow):
       
     def display_lopt_line(self, line):  
         """Sets values for the various controls and the line plot in the LOPT line panel.""" 
-        line_dict = list(line.transpose().to_dict().values()).pop()   
+        line_dict = list(line.transpose().to_dict().values()).pop()  
         self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
         
@@ -718,8 +724,10 @@ class MyFrame(mainWindow):
         """Exports a sorted and formatted list of all LOPT levels and their lines."""
         with wx.FileDialog(self, "Export LOPT Sorted Levels", wildcard="Linelist Files (*.llf)|*.llf",
                        style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
-            if 'self.lopt_levs' in globals():  # LOPT has been run
-                
+           
+            # if 'self.lopt_levs' in globals():  # LOPT has been run
+            
+            try:
                 if fileDialog.ShowModal() == wx.ID_CANCEL:
                     return     # the user changed their mind
         
@@ -750,11 +758,17 @@ class MyFrame(mainWindow):
                                 trans_lev = line['L2']
                             else:
                                 trans_lev = line['L1']
+                                
+                            if line['F'] == 'Q':
+                                flag = 'M'
+                            else:
+                                flag = ' '
                             
-                            file.write(f"{star:<3}{line['tags']:<5}{line['log_ew']:<8.2f}{line['peak']:<8.0f}{line['wavenumber']:<15.4f}{line['uncW_o']:<12.4f}{line['dWO-C']:>7.4f}        {trans_lev:<12}Tags\n")
+                            file.write(f"{star:<3}{line['tags']:<5}{line['log_ew']:<8.2f}{line['peak']:<8.0f}{line['wavenumber']:<15.4f}{line['uncW_o']:<12.4f}{line['dWO-C']:>7.4f}        {trans_lev:<12}{flag}\n")
                         
                         file.write('--------------------------------------------\n')
-            else:
+                        
+            except AttributeError:
                 wx.MessageBox('No levels found from LOPT output. Please run LOPT first', 'No Levels Found', 
                               wx.OK | wx.ICON_EXCLAMATION)
         
