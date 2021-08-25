@@ -522,12 +522,14 @@ class MyFrame(mainWindow):
       
     def display_lopt_line(self, line):  
         """Sets values for the various controls and the line plot in the LOPT line panel.""" 
+        
         line_dict = list(line.transpose().to_dict().values()).pop()  
         self.user_unc_txtctrl.SetValue('')  # sets back to empty when new line selected        
         self.lopt_line_panel_header.SetLabel(f"Line: {line_dict['wavenumber']:.4f} {self.cm_1}")
         
         ### Get all designations and update the desig listctrl ###
         self.lopt_line_listctrl.DeleteAllItems()
+        
         
         for i, desig in enumerate(line_dict['main_desig'] + line_dict['other_desig']):
             list_ctrl_list = [desig['element_name'], 
@@ -540,7 +542,7 @@ class MyFrame(mainWindow):
             
             if desig == line_dict['user_desig']:
                 self.lopt_line_listctrl.CheckItem(i, True)
-        
+
         ### Update the checkboxes ###   
         line_tags = line_dict['line_tags']        
         self.ringing_chkbox.SetValue(line_tags['ringing'])
@@ -559,7 +561,7 @@ class MyFrame(mainWindow):
         
         ### Plot spectra ###        
         self.plot_lopt_line(line_dict['wavenumber'], line_dict['peak'], line_dict['width'])
-    
+        
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Show()
         self.sizer_8.Layout()
@@ -570,19 +572,18 @@ class MyFrame(mainWindow):
         plot_width = self.lopt_plot_width / 2  # as this is total width
         # plot_y_scale = 1.1
         # plot_x_scale = 5.
-        
         self.matplotlib_canvas.clear()  
         ax = self.matplotlib_canvas.gca()   
-        # df_part = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width) & (self.plot_df['wavenumber'] > wavenumber-plot_width)]
-        # XXX Test to see if below or above is faster
-        df_part_1 = self.plot_df.loc[(self.plot_df['wavenumber'] < wavenumber+plot_width)]
-        df_part = df_part_1.loc[(df_part_1['wavenumber'] > wavenumber-plot_width)]
-                
-        spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
         
+        low = abs(self.plot_df['wavenumber'] - (wavenumber-plot_width)).idxmin() + 1
+        high = abs(self.plot_df['wavenumber'] - (wavenumber+plot_width)).idxmin() + 1
+        df_part = self.plot_df.iloc[low:high]
+           
+        spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
+
         for spectra in spectras:
             df_part.plot(kind='line', x='wavenumber', y=spectra, ax=ax)
-            
+
         self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
         self.matplotlib_canvas.axes.set_ylabel('SNR')
         ax.ticklabel_format(useOffset=False)
