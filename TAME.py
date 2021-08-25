@@ -138,7 +138,7 @@ class MyFrame(mainWindow):
         if str(tag) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return ''
         elif tag == 'b':
-            return 'B'
+            return 'U'
         elif tag == 'Q':
             return 'M'
         else:
@@ -147,6 +147,7 @@ class MyFrame(mainWindow):
     def neg_num_str(self, diff):
         """Convert diff to 4 d.p. float and make it right alinged. Means that negative numbers aren't shifted to the right."""
         return f'{diff:>7.4f}'
+    
     ############################################################################
     
         
@@ -411,6 +412,7 @@ class MyFrame(mainWindow):
                                 unc = f'{line[5]:.4f}'
                             elif tags['user_unc'] != False:
                                 unc = f"{tags['user_unc']:.4f}"
+                                tag = '       B'
                             else:
                                 unc = f'{self.lopt_default_unc:.4f}'
                                 tag = '       B'
@@ -426,6 +428,7 @@ class MyFrame(mainWindow):
                             unc = f'{line[5]:.4f}'
                         elif tags['user_unc'] != False:
                             unc = f"{tags['user_unc']:.4f}"
+                            tag = '       B'
                         else:
                             unc = f'{self.lopt_default_unc:.4f}'
                             tag = '       B'
@@ -665,6 +668,7 @@ class MyFrame(mainWindow):
         self.project_config.set('lopt', 'fixed_levels', level_config_string)
         
         return True
+        
        
     def export_linelist(self, full_list):
         """Exports the STRANS output linelist with matched transitions. full_list determines whether only lines with
@@ -1192,7 +1196,9 @@ class fixedLevels(fixedLevelsDialog):
     
     def on_fixed_lev_ok(self, event):
         """User has clicked OK button. Check that at least one level has been selected to be fixed."""
-        if self.fixed_levels == ['']:  # no fixed level(s) selected
+        print(self.fixed_levels)
+        
+        if self.fixed_levels == []:  # no fixed level(s) selected
             wx.MessageBox('At least one level must be fixed.', 'Fixed Level Error', 
                           wx.OK | wx.ICON_EXCLAMATION)
         else:
