@@ -8,39 +8,50 @@ Created on Wed Aug 25 16:54:13 2021
 
 import pandas as pd
 
-def split_tol(test_list, tol):
-    res = []
-    last = test_list[0]
-    for ele in test_list:
-        if ele-last > tol:
-            yield res
-            res = []
-        res.append(ele)
-        last = ele
-    yield res
+def levhams_match_tol(line_list, tol):
+    """Generator function to split predicted lines groups with each element sperarated from its neighbour 
+    by <= a given tolerance.
+    """
+    matches = []
+    last = line_list[0]['wavenumber']
+    
+    for element in line_list:
+        if element['wavenumber'] - last > tol:
+            yield matches
+            matches = []
+            
+        matches.append(element)
+        last = element['wavenumber']
+    yield matches
     
 
 strans_levs = list(pd.read_csv('ni2_input_levhams.lev', dtype={'parity':float}).transpose().to_dict().values()) 
-energies = [x['energy'] for x in strans_levs[:36]]
+levels = [x for x in strans_levs[:36]]
 
 lines = list(pd.read_csv('ni2_input_cutdown.lin', dtype={'parity':float}).transpose().to_dict().values()) 
 lines = [x['wavenumber'] for x in lines]
 
-
 pred_lines = []
 
-for energy in energies:
+
+
+for level in levels:
     for line in lines:
-        pred_lines.append(abs(energy - line))
-        
-        
+        pred_lines.append({'wavenumber': level['energy'] - line, 'level':level['label']})
+        pred_lines.append({'wavenumber': level['energy'] + line, 'level':level['label']})
 
-pred_lines = list(dict.fromkeys(sorted(pred_lines))) 
 
-res = list(split_tol(pred_lines, 0.01))
+pred_lines = sorted(pred_lines, key=lambda k: k['wavenumber'])
 
-# print(res)
+pred_levels = list(levhams_match_tol(pred_lines, 0.001))
 
-for lev in res:
-    if len(lev) > 2:
-        print(lev)
+for level in pred_levels:
+    if len(level) > 5:
+        sum_lines = 0.
+        print('-------------------------------------')
+        for line in level:
+            print(line)
+            #print('\n')
+            sum_lines += line['wavenumber']
+        print('                                     ' + str(sum_lines/len(level)) + '   ' + str(abs(level[0]['wavenumber'] - level[-1]['wavenumber'])))
+    

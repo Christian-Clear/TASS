@@ -39,6 +39,7 @@ class MyFrame(mainWindow):
         """Set the constants that are used throughout TAME."""
         self.cm_1 = 'cm\u207B\u00B9'  # unicode for inverse centimetres
         self.blank_strans_lev = {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0}
+        self.levhams_selected_levs = {}
    
     def configure_layout(self):
         """ Configure the main TAME screen layout and positioning."""
@@ -94,8 +95,11 @@ class MyFrame(mainWindow):
         
         self.lopt_lev_ojlv.SetEmptyListMsg("Run LOPT first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
-        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)        
+        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)   
+        
         self.lopt_line_listctrl.EnableCheckBoxes(True)
+        self.levhams_level_listctrl.EnableCheckBoxes(True)
+        
 
     ### String/Group Converters for Object and Group Listviews #################
     def loptGroupKeyConverter(self, energy):
@@ -251,7 +255,7 @@ class MyFrame(mainWindow):
     def strans(self, strans_levs, desig_list, element_name):
         """Creates list of all possible transitions between levels of opposite parity that obey
         the J selection rule. The list is then compared to all lines in the self.db database and lines with 
-        wavenumbers that within self.strans_wn_discrim are assigned the labels of the even and odd level."""
+        wavenumbers that match within self.strans_wn_discrim are assigned the labels of the even and odd level."""
                     
         self.frame_statusbar.SetStatusText(f'Running Strans for {element_name}')
                 
@@ -540,7 +544,6 @@ class MyFrame(mainWindow):
                               desig['lower_level'],
                               'wn_diff']
 
-            
             self.lopt_line_listctrl.Append(list_ctrl_list)
             
             if desig == line_dict['user_desig']:
@@ -722,29 +725,130 @@ class MyFrame(mainWindow):
                     file.writelines(','.join(line[:8]) + '\n') 
                     
         self.frame_statusbar.SetStatusText(f'{linelist_type} linelist exported to {filename}')   
+      
+        
+      
+    def levhams_match_tol(self, line_list, tol):
+        """Generator function to split predicted lines into groups with each element sperarated from its neighbour 
+        by a maximium given tolerance.
+        """
+        matches = []
+        last = line_list[0]['wavenumber']
+        
+        for element in line_list:
+            if element['wavenumber'] - last > tol:
+                yield matches
+                matches = []
+                
+            matches.append(element)
+            last = element['wavenumber']
+        yield matches    
+        
+    
+    def display_levhams_levs(self, levels):
+        """Add the list of """
+        self.levhams_min_matches = 5  # XXX add this to main params and load at startup   
+        
+        self.levhams_output_listctrl.DeleteAllItems()
+        
+        for level in levels:
+            
+            if len(level) >= self.levhams_min_matches:
+                sum_lines = 0.
+                for line in level:
+                    self.levhams_output_listctrl.Append([line['wavenumber'], line['level'], '', ''])
+                    sum_lines += line['wavenumber']
+                self.levhams_output_listctrl.Append(['', '', f"{sum_lines/len(level):.4f}", f"{level[-1]['wavenumber'] - level[0]['wavenumber']:.4f}"])
+                self.levhams_output_listctrl.SetItemBackgroundColour(self.levhams_output_listctrl.GetItemCount()-1, 'sky blue')
+        
+      
         
 ### Event-driven functions ###  
+
+    def on_notebook_page_change(self, event): 
+        """Detects a change in notebook page. This is needed to ensure that the LEVHAMS page always uses the most
+        up to date level values.
+        """
+        if self.main_panel.GetSelection() == 2:  # Update LEVHAMS level listctrl with the latest strans values            
+            with wx.EventBlocker(self):  # prevents the event from firing            
+                self.levhams_level_listctrl.DeleteAllItems()  # otherwise just appends to prev. values
+                
+                if not self.levhams_selected_levs:  # populate dict if doesn't exist already
+                    for level in self.strans_levs:
+                        self.levhams_selected_levs[level['label']] = False
+                
+                for i, level in enumerate(self.strans_levs):                    
+                    levhams_level_list = [
+                        level['label'],
+                        level['j'],
+                        level['energy'],
+                        level['parity']]          
+                    self.levhams_level_listctrl.Append(levhams_level_list)  
+                    
+                    if level['label'] in self.levhams_selected_levs:  # set checkboxes
+                        self.levhams_level_listctrl.CheckItem(i, self.levhams_selected_levs[level['label']])
+                    else:
+                        self.levhams_selected_levs[level['label']] = False
+                        
+    def on_levhams_lev_checked(self, event):  
+        """Updates levhams_selected_lines based on user selection"""           
+        level_label = self.levhams_level_listctrl.GetItem(event.GetIndex(), 0).GetText()
+        self.levhams_selected_levs[level_label] = True
+        
+
+    def on_levhams_lev_unchecked(self, event): 
+        """Updates levhams_selected_lines based on user selection"""        
+        level_label = self.levhams_level_listctrl.GetItem(event.GetIndex(), 0).GetText()
+        self.levhams_selected_levs[level_label] = False
+        
+        
+    def on_levhams(self, event): 
+        
+        self.levhams_tol = 0.001  # XXX add this to the main params and load it at startup.
+        
+        if self.main_panel.GetSelection() != 2:
+            self.main_panel.ChangeSelection(2)
+            self.on_notebook_page_change(None)
+        
+        selected_levs = [lev for lev in self.strans_levs if self.levhams_selected_levs[lev['label']]]
+        
+        if selected_levs:     
+            print(list(self.df.transpose().to_dict().values()))  # XXX START HERE! Change line below to this
+            all_lines = self.df['wavenumber'].tolist()  # xxx here is where you would run a query for all lines without a desig if you wanted to implement that
+            pred_lines = []
+            
+            for level in selected_levs:  
+                for line in all_lines:
+                    pred_lines.append({'wavenumber': level['energy'] - line, 'level':level['label']})
+                    pred_lines.append({'wavenumber': level['energy'] + line, 'level':level['label']})
+            
+            pred_lines = sorted(pred_lines, key=lambda k: k['wavenumber'])  # sort by wavenumber
+            pred_levels = list(self.levhams_match_tol(pred_lines, self.levhams_tol))  # separates predicted lines into groups
+            
+            self.display_levhams_levs(pred_levels)
+            
+        else:
+            wx.MessageBox('No levels selected for LEVHAMS. Please tick levels you wish to use first.', 'No Levels Selected', 
+                              wx.OK | wx.ICON_EXCLAMATION)
+            
+        
 
     def on_export_lopt_levs(self, event):    
         """Exports a sorted and formatted list of all LOPT levels and their lines."""
         with wx.FileDialog(self, "Export LOPT Sorted Levels", wildcard="Linelist Files (*.llf)|*.llf",
                        style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
            
-            # if 'self.lopt_levs' in globals():  # LOPT has been run
-            
+            # if 'self.lopt_levs' in globals():  # LOPT has been run            
             try:
                 if fileDialog.ShowModal() == wx.ID_CANCEL:
-                    return     # the user changed their mind
-        
+                    return     # the user changed their mind        
                 filename = fileDialog.GetPath()
                 
                 if filename.split('.')[-1] != 'llf':   #if user types new filename in dialog
-                    filename += '.llf'
-                
+                    filename += '.llf'                
                 lopt_levels = list(self.lopt_levs.transpose().to_dict().values())
     
-                with open(filename, 'w') as file:
-            
+                with open(filename, 'w') as file:            
                     for level in lopt_levels: 
                         file.write('--------------------------------------------\n')
                         file.write('Config      Energy (cm-1)   D1        D2        D3        No. of Lines  Comments\n')
