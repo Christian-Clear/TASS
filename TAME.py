@@ -40,6 +40,10 @@ class MyFrame(mainWindow):
         self.cm_1 = 'cm\u207B\u00B9'  # unicode for inverse centimetres
         self.blank_strans_lev = {'label': '', 'j':0.0 , 'energy':0.0 , 'parity':0}
         self.levhams_selected_levs = {}
+        self.groupHeaderColour = wx.Colour(159, 185, 250, 249)  # BLUE
+        self.evenRowsBackColour = wx.Colour(240, 248, 255)  # ALICE BLUE
+        self.oddRowsBackColour = wx.Colour(255, 250, 205)  # LEMON CHIFFON
+    
    
     def configure_layout(self):
         """ Configure the main TAME screen layout and positioning."""
@@ -99,6 +103,8 @@ class MyFrame(mainWindow):
         
         self.lopt_line_listctrl.EnableCheckBoxes(True)
         self.levhams_level_listctrl.EnableCheckBoxes(True)
+        
+        
         
 
     ### String/Group Converters for Object and Group Listviews #################
@@ -477,6 +483,14 @@ class MyFrame(mainWindow):
     def get_lopt_output(self):
         """Gets output from the LOPT output files. Puts these into dataframes. Duplicates lines so that the line appears
         in the output GroupListView twice - once for each level in the transition."""
+        self.lopt_lev_pos = self.lopt_lev_ojlv.GetTopItem()
+        self.lopt_lev_select_row = self.lopt_lev_ojlv.GetFocusedRow()          
+        self.lopt_lev_groups_expanded = []
+        
+        if self.lopt_lev_ojlv.groups:
+            for i, group in enumerate(self.lopt_lev_ojlv.groups):
+                self.lopt_lev_groups_expanded.append((i, group.isExpanded))
+
         self.lopt_levs = pd.read_csv(self.lopt_lev_file, delimiter='\t')
         lopt_lines_df = pd.read_csv(self.lopt_lin_file, delimiter='\t')
         merged_lines = pd.merge_asof(lopt_lines_df[['W_obs', 'S', 'Wn_c', 'E1', 'E2', 'L1', 'L2', 'F', 'uncW_o']].sort_values('W_obs'), 
@@ -510,6 +524,16 @@ class MyFrame(mainWindow):
         self.lopt_lev_ojlv.SetObjects(duplicated_lines)         
         self.lopt_output_lines = duplicated_lines        
         # self.load_lopt_lev_comments()    
+        self.lopt_lev_ojlv.EnsureVisible(min(self.lopt_lev_pos + self.lopt_lev_ojlv.GetCountPerPage() - 1, self.lopt_lev_ojlv.GetItemCount() - 1))  # ensures that the levels stay in the same scrolled position after lopt has run.
+           
+        for group in self.lopt_lev_groups_expanded:
+            if not group[1]:
+                self.lopt_lev_ojlv.Collapse(self.lopt_lev_ojlv.groups[group[0]])
+                
+        if self.lopt_lev_select_row != -1:  # -1 means no row was focussed.
+            self.lopt_lev_ojlv.Select(self.lopt_lev_select_row)  # puts the focus back on the line that was focussed before lopt ran.
+        
+        
         
     def load_lopt_lev_comments(self):
         """Load the comments for each level. If the pkl file is missing - create it from the strans levels"""        
@@ -601,6 +625,7 @@ class MyFrame(mainWindow):
     
     def display_lopt_lev(self, level):
         """Display info about the LOPT level. Also the user comments."""
+        
         lev_dict = list(level.transpose().to_dict().values()).pop()         
         self.lopt_lev_panel_header.SetLabel(f"Level: {lev_dict['Designation']}")
         self.lopt_level_listctrl.DeleteAllItems()
@@ -628,6 +653,8 @@ class MyFrame(mainWindow):
         self.lopt_level_panel.Show()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
+    
+       
         
     def update_df_cell(self, wavenumber, column, value):
         """Updates a cell of the main self.df dataframe, specified by wavenumber and column, with value."""   
@@ -733,33 +760,42 @@ class MyFrame(mainWindow):
         by a maximium given tolerance.
         """
         matches = []
-        last = line_list[0]['wavenumber']
+        last = line_list[0]['pred_energy']
         
         for element in line_list:
-            if element['wavenumber'] - last > tol:
+            if element['pred_energy'] - last > tol:
                 yield matches
                 matches = []
                 
             matches.append(element)
-            last = element['wavenumber']
+            last = element['pred_energy']
         yield matches    
         
     
     def display_levhams_levs(self, levels):
-        """Add the list of """
-        self.levhams_min_matches = 5  # XXX add this to main params and load at startup   
-        
+        """Add the list of grouped level lines from levhams to the listctrl if there are >= the number of selected lines
+        in each group. Also highlights the summary row."""
+               
         self.levhams_output_listctrl.DeleteAllItems()
         
-        for level in levels:
-            
+        for level in levels:            
             if len(level) >= self.levhams_min_matches:
                 sum_lines = 0.
+                
                 for line in level:
-                    self.levhams_output_listctrl.Append([line['wavenumber'], line['level'], '', ''])
-                    sum_lines += line['wavenumber']
-                self.levhams_output_listctrl.Append(['', '', f"{sum_lines/len(level):.4f}", f"{level[-1]['wavenumber'] - level[0]['wavenumber']:.4f}"])
-                self.levhams_output_listctrl.SetItemBackgroundColour(self.levhams_output_listctrl.GetItemCount()-1, 'sky blue')
+                    self.levhams_output_listctrl.Append([f"{line['energy']:.4f}", 
+                                                         f"{line['wavenumber']:.4f}",
+                                                         f"{np.log(line['eq width']):.2f}",
+                                                         line['level'],
+                                                         line['j'],
+                                                         f"{line['pred_energy']:.4f}",                                                         
+                                                         ''])
+                    sum_lines += line['pred_energy']
+                    
+                self.levhams_output_listctrl.Append(['', '', '', '', '', '',
+                                                     f"{sum_lines/len(level):.4f}"])
+                
+                self.levhams_output_listctrl.SetItemBackgroundColour(self.levhams_output_listctrl.GetItemCount()-1, self.groupHeaderColour)
         
       
         
@@ -791,38 +827,58 @@ class MyFrame(mainWindow):
                         self.levhams_selected_levs[level['label']] = False
                         
     def on_levhams_lev_checked(self, event):  
-        """Updates levhams_selected_lines based on user selection"""           
+        """Updates levhams_selected_lines based on user checkbox selection"""           
         level_label = self.levhams_level_listctrl.GetItem(event.GetIndex(), 0).GetText()
         self.levhams_selected_levs[level_label] = True
         
 
     def on_levhams_lev_unchecked(self, event): 
-        """Updates levhams_selected_lines based on user selection"""        
+        """Updates levhams_selected_lines based on user checkbox selection"""        
         level_label = self.levhams_level_listctrl.GetItem(event.GetIndex(), 0).GetText()
         self.levhams_selected_levs[level_label] = False
         
         
     def on_levhams(self, event): 
-        
-        self.levhams_tol = 0.001  # XXX add this to the main params and load it at startup.
+        """Runs the main levhams code when the user selects run."""
         
         if self.main_panel.GetSelection() != 2:
             self.main_panel.ChangeSelection(2)
             self.on_notebook_page_change(None)
         
+        self.levhams_tol = self.levhams_tol_spinctrl.GetValue() # XXX add this to the main params and load it at startup.
+        self.levhams_min_matches = self.levhams_num_spinctrl.GetValue()  # XXX add this to main params and load at startup   
+        self.levhams_use_all_lines = self.levhams_all_rbutton.GetValue()  # if the all lines radio button is selected
+                
         selected_levs = [lev for lev in self.strans_levs if self.levhams_selected_levs[lev['label']]]
         
-        if selected_levs:     
-            print(list(self.df.transpose().to_dict().values()))  # XXX START HERE! Change line below to this
-            all_lines = self.df['wavenumber'].tolist()  # xxx here is where you would run a query for all lines without a desig if you wanted to implement that
+        if selected_levs:  
+            
             pred_lines = []
+            all_lines = list(self.df[['wavenumber','peak','eq width','unc', 'main_desig']].transpose().to_dict().values()) # xxx here is where you would run a query for all lines without a desig if you wanted to implement that
+            
+            if not self.levhams_use_all_lines:
+                all_lines = [x for x in all_lines if not x['main_desig']]
             
             for level in selected_levs:  
                 for line in all_lines:
-                    pred_lines.append({'wavenumber': level['energy'] - line, 'level':level['label']})
-                    pred_lines.append({'wavenumber': level['energy'] + line, 'level':level['label']})
+                    pred_lines.append({'pred_energy':level['energy'] - line['wavenumber'], 
+                                       'level':level['label'], 
+                                       'j':level['j'],
+                                       'energy':level['energy'],
+                                       'wavenumber':line['wavenumber'],
+                                       'peak':line['peak'],
+                                       'eq width':line['eq width'],
+                                       'unc':line['unc']})
+                    pred_lines.append({'pred_energy':level['energy'] + line['wavenumber'], 
+                                       'level':level['label'], 
+                                       'j':level['j'],
+                                       'energy':level['energy'],
+                                       'wavenumber':line['wavenumber'],
+                                       'peak':line['peak'],
+                                       'eq width':line['eq width'],
+                                       'unc':line['unc']})
             
-            pred_lines = sorted(pred_lines, key=lambda k: k['wavenumber'])  # sort by wavenumber
+            pred_lines = sorted(pred_lines, key=lambda k: k['pred_energy'])  # sort by wavenumber
             pred_levels = list(self.levhams_match_tol(pred_lines, self.levhams_tol))  # separates predicted lines into groups
             
             self.display_levhams_levs(pred_levels)
