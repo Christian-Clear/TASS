@@ -5,7 +5,7 @@ import wx
 import numpy as np
 import pandas as pd
 import os
-from TAME_GUI import mainWindow, newProjectDialog, fixedLevelsDialog, propertiesDialog
+from TAME_GUI import mainWindow, newProjectDialog, fixedLevelsDialog, propertiesDialog, lostLinesDialog
 import os.path
 import bisect
 import configparser
@@ -328,6 +328,8 @@ class MyFrame(mainWindow):
         self.lopt_lev_comments_file = self.project_config.get('files', 'lopt_lev_comments_file')
         self.other_lev_list = self.project_config.get('files', 'other_lev_files').split('\n')
 
+        print(self.other_lev_list)
+
         self.lopt_fixed_levels = self.project_config.get('lopt', 'fixed_levels').split(',')
         self.star_discrim = self.project_config.getfloat('lopt', 'star_discrim')
         self.lopt_plot_width = self.project_config.getfloat('lopt', 'plot_width')
@@ -423,7 +425,11 @@ class MyFrame(mainWindow):
                             elif tags['user_unc'] != False:
                                 unc = f"{tags['user_unc']:.4f}"
                                 tag = '       B'
+                            elif tags['multiple_lines'] == True:  # multiple lines could have been a transition, but the user has selected one.
+                                print(wn)    
+                                unc = f'{line[5]:.4f}'
                             else:
+                                print(tags)
                                 unc = f'{self.lopt_default_unc:.4f}'
                                 tag = '       B'
                             
@@ -441,7 +447,7 @@ class MyFrame(mainWindow):
                             tag = '       B'
                         else:
                             unc = f'{self.lopt_default_unc:.4f}'
-                            tag = '       B'
+                            tag = '       Q'
                             
                         for desig in main_desigs:
                             upper_level = f'{desig["upper_level"]:>12}'
@@ -595,6 +601,7 @@ class MyFrame(mainWindow):
         self.lopt_level_panel.Hide()
         self.lopt_line_panel.Show()
         self.sizer_8.Layout()
+        
      
     def plot_lopt_line(self, wavenumber, peak, width):   
         """Plots the spectra from self.plot_df to the matplotlib plot. There are scaling factors that can be changed to show
@@ -1019,6 +1026,7 @@ class MyFrame(mainWindow):
                     
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']       
         self.update_df_cell(selected_wn, 'user_desig', user_desig)
+        
 
     def on_lopt_trans_unchecked(self, event):
         """Updates the main df with the user selected tag."""
@@ -1325,6 +1333,16 @@ class MyFrame(mainWindow):
         aboutInfo.AddDeveloper("TAME: Christian Clear \nLOPT: Alexander Kramida")
         wx.adv.AboutBox(aboutInfo)
  
+    def on_lost_lines(self, event):
+        """Shows the lostLinesDialog and removes the user designation from any selected lines."""
+        lost_lines_dialog = lostLines(self)
+        
+        if lost_lines_dialog.ShowModal() == wx.ID_OK:
+            checked_lines = lost_lines_dialog.checked_lines
+            
+            for line_wn in checked_lines:
+                self.update_df_cell(float(line_wn), 'user_desig', '')
+    
   
 class fixedLevels(fixedLevelsDialog):
     """Dialog class for the fixed level selection."""
@@ -1364,6 +1382,47 @@ class fixedLevels(fixedLevelsDialog):
         else:
             self.EndModal(wx.ID_OK)
             
+            
+class lostLines(lostLinesDialog):
+    """Dialog class for the lost lines selection. Restores lines that have been removed from the LOPT fit by the user, 
+    that would otherwise not be visible anywhere in TAME."""
+    
+    def __init__(self, *args, **kwds):
+        """Populate the list ctrl with any lines that have a user specified designation that is not in the current
+        strans input levels file."""
+        lostLinesDialog.__init__(self, *args, **kwds)  
+        
+        self.lost_lines_lc.EnableCheckBoxes(True)
+        self.lost_lines_lc.DeleteAllItems()
+        self.checked_lines = []
+        
+        strans_levs = [x['label'] for x in self.GetParent().strans_levs]
+        lines = self.GetParent().df.loc[self.GetParent().df.user_desig.str.len() > 0 ].values.tolist()
+        
+        
+        for line in lines:
+            wn = line[0]
+            user_desig = dict(line[8])
+            
+            if user_desig['element_name'] != self.GetParent().main_element_name:  
+                if user_desig['upper_level'] not in strans_levs or user_desig['lower_level'] not in strans_levs:
+                    user_desig_str = f"{user_desig['element_name']}: {user_desig['upper_level']} - {user_desig['lower_level']}" 
+                    self.lost_lines_lc.Append([wn, user_desig_str])
+        
+    def on_lost_lines_checked(self, event):
+        """User has checked the checkbox of a line. Update checked_lines"""
+        line = self.lost_lines_lc.GetItem(event.GetIndex(), 0).GetText()
+        self.checked_lines.append(line)
+               
+    def on_lost_lines_unchecked(self, event):
+        """User has unhecked the checkbox of a line. Update checked_lines"""
+        line = self.lost_lines_lc.GetItem(event.GetIndex(), 0).GetText()
+        self.checked_lines = [x for x in self.checked_lines if x != line]      
+    
+    def on_lost_lines_ok(self, event):           
+        self.EndModal(wx.ID_OK)
+        
+        
              
 class newProject(newProjectDialog):
     def __init__(self, *args, **kwds):
