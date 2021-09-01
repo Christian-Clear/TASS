@@ -82,7 +82,7 @@ class MyFrame(mainWindow):
             ColumnDefn('Main Element Transitions', 'left', 500, 'main_desig'),
             ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig', isSpaceFilling=True)])
         
-        self.strans_lines_ojlv.SetEmptyListMsg("Run STRANS first")
+        self.strans_lines_ojlv.SetEmptyListMsg("Run Line Matching first")
         
         self.group_column = ColumnDefn(f'Level ({self.cm_1})', 'left', 100, 'main_level', stringConverter="%.4f", groupKeyConverter=self.loptGroupKeyConverter)       
         self.lopt_lev_ojlv.SetColumns([
@@ -97,7 +97,7 @@ class MyFrame(mainWindow):
             ColumnDefn('Level', 'left', 100, 'other_level'),
             ColumnDefn('Tags', 'left', 40, 'F', stringConverter=self.correct_tags ,isSpaceFilling=True)])
         
-        self.lopt_lev_ojlv.SetEmptyListMsg("Run LOPT first")
+        self.lopt_lev_ojlv.SetEmptyListMsg("Run Level Optimisation first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
         self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)   
         
@@ -263,7 +263,7 @@ class MyFrame(mainWindow):
         the J selection rule. The list is then compared to all lines in the self.db database and lines with 
         wavenumbers that match within self.strans_wn_discrim are assigned the labels of the even and odd level."""
                     
-        self.frame_statusbar.SetStatusText(f'Running Strans for {element_name}')
+        self.frame_statusbar.SetStatusText(f'Running Line Matching for {element_name}')
                 
         strans_levs_even = [x for x in strans_levs if x['parity']==1]
         strans_levs_odd = [x for x in strans_levs if x['parity']==0]
@@ -327,8 +327,6 @@ class MyFrame(mainWindow):
         self.plot_df_file = self.project_config.get('files', 'plot_file')
         self.lopt_lev_comments_file = self.project_config.get('files', 'lopt_lev_comments_file')
         self.other_lev_list = self.project_config.get('files', 'other_lev_files').split('\n')
-
-        print(self.other_lev_list)
 
         self.lopt_fixed_levels = self.project_config.get('lopt', 'fixed_levels').split(',')
         self.star_discrim = self.project_config.getfloat('lopt', 'star_discrim')
@@ -425,11 +423,9 @@ class MyFrame(mainWindow):
                             elif tags['user_unc'] != False:
                                 unc = f"{tags['user_unc']:.4f}"
                                 tag = '       B'
-                            elif tags['multiple_lines'] == True:  # multiple lines could have been a transition, but the user has selected one.
-                                print(wn)    
+                            elif tags['multiple_lines'] == True:  # multiple lines could have been a transition, but the user has selected one. 
                                 unc = f'{line[5]:.4f}'
                             else:
-                                print(tags)
                                 unc = f'{self.lopt_default_unc:.4f}'
                                 tag = '       B'
                             
@@ -447,7 +443,7 @@ class MyFrame(mainWindow):
                             tag = '       B'
                         else:
                             unc = f'{self.lopt_default_unc:.4f}'
-                            tag = '       Q'
+                            tag = '       B'
                             
                         for desig in main_desigs:
                             upper_level = f'{desig["upper_level"]:>12}'
@@ -660,7 +656,6 @@ class MyFrame(mainWindow):
         self.lopt_level_panel.Show()
         self.lopt_line_panel.Hide()
         self.sizer_8.Layout()
-    
        
         
     def update_df_cell(self, wavenumber, column, value):
@@ -783,11 +778,13 @@ class MyFrame(mainWindow):
         """Add the list of grouped level lines from levhams to the listctrl if there are >= the number of selected lines
         in each group. Also highlights the summary row."""
                
-        self.levhams_output_listctrl.DeleteAllItems()
+        self.levhams_output_listctrl.DeleteAllItems()        
+        num_levels = 0
         
         for level in levels:            
             if len(level) >= self.levhams_min_matches:
                 sum_lines = 0.
+                num_levels += 1
                 
                 for line in level:
                     self.levhams_output_listctrl.Append([f"{line['energy']:.4f}", 
@@ -803,6 +800,14 @@ class MyFrame(mainWindow):
                                                      f"{sum_lines/len(level):.4f}"])
                 
                 self.levhams_output_listctrl.SetItemBackgroundColour(self.levhams_output_listctrl.GetItemCount()-1, self.groupHeaderColour)
+                self.levhams_output_listctrl.Append(['', '', '', '', '', '',''])  # blank line
+                
+        self.frame_statusbar.SetStatusText(f'{num_levels} predicted levels found.')
+        
+        if num_levels == 0:
+            wx.MessageBox('No predicted levels found. Please add more levels or change search parameters.', 'No Predicted Levels Found', 
+                              wx.OK | wx.ICON_EXCLAMATION)
+        
         
       
         
@@ -851,10 +856,14 @@ class MyFrame(mainWindow):
         if self.main_panel.GetSelection() != 2:
             self.main_panel.ChangeSelection(2)
             self.on_notebook_page_change(None)
+            
+        self.frame_statusbar.SetStatusText('Predicting Levels ...') 
         
         self.levhams_tol = self.levhams_tol_spinctrl.GetValue() # XXX add this to the main params and load it at startup.
         self.levhams_min_matches = self.levhams_num_spinctrl.GetValue()  # XXX add this to main params and load at startup   
         self.levhams_use_all_lines = self.levhams_all_rbutton.GetValue()  # if the all lines radio button is selected
+        self.levhams_wn_max = self.levhams_wn_max_spinctrl.GetValue()
+        self.levhams_wn_min = self.levhams_wn_min_spinctrl.GetValue()
                 
         selected_levs = [lev for lev in self.strans_levs if self.levhams_selected_levs[lev['label']]]
         
@@ -885,13 +894,18 @@ class MyFrame(mainWindow):
                                        'eq width':line['eq width'],
                                        'unc':line['unc']})
             
-            pred_lines = sorted(pred_lines, key=lambda k: k['pred_energy'])  # sort by wavenumber
-            pred_levels = list(self.levhams_match_tol(pred_lines, self.levhams_tol))  # separates predicted lines into groups
+            pred_lines = sorted(pred_lines, key=lambda k: k['pred_energy'])  # sort by wavenumber            
+            pred_lines = [x for x in pred_lines if x['pred_energy'] >= self.levhams_wn_min and x['pred_energy'] <= self.levhams_wn_max]
             
-            self.display_levhams_levs(pred_levels)
+            if pred_lines:  # if there are any predicted lines
+                pred_levels = list(self.levhams_match_tol(pred_lines, self.levhams_tol))  # separates predicted lines into groups
+                self.display_levhams_levs(pred_levels)
+            else:
+                wx.MessageBox('No predicted levels found. Please add more levels or change search parameters.', 'No Predicted Levels Found', 
+                              wx.OK | wx.ICON_EXCLAMATION)
             
         else:
-            wx.MessageBox('No levels selected for LEVHAMS. Please tick levels you wish to use first.', 'No Levels Selected', 
+            wx.MessageBox('No levels selected for Level Prediction. Please tick the levels you wish to use first.', 'No Levels Selected', 
                               wx.OK | wx.ICON_EXCLAMATION)
             
         
@@ -1038,14 +1052,14 @@ class MyFrame(mainWindow):
         not change between STRANS runs."""
         if self.main_strans(self.strans_levs):  # if strans ran succesfully
             self.main_panel.ChangeSelection(0)  # changes the notebook tab to STRANS
-            self.frame_statusbar.SetStatusText('Strans Complete')
+            self.frame_statusbar.SetStatusText('Line Matching Complete')
         
     def on_full_strans(self, event):  
         """Runs STRANS for all elements."""
         if self.main_strans(self.strans_levs): # if strans ran succesfully
             self.other_strans(self.other_lev_list)
             self.main_panel.ChangeSelection(0)  # changes the notebook tab to STRANS
-            self.frame_statusbar.SetStatusText('Strans Complete')
+            self.frame_statusbar.SetStatusText('Line Matching Complete')
            
     def on_strans_del(self, event):  
         """Delete levels from self.strans_lev_file. This will be a permanent change when saved by user."""
@@ -1205,7 +1219,7 @@ class MyFrame(mainWindow):
             #     wx.MessageBox('\n'.join(p), 'LOPT Issue', 
             #               wx.OK | wx.ICON_EXCLAMATION)
         else:
-            self.frame_statusbar.SetStatusText('Run STRANS first') 
+            self.frame_statusbar.SetStatusText('Run Line Matching first') 
                         
     def on_Save(self, event):  
         """Saves all user changes for the project."""
