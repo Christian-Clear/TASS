@@ -3,7 +3,6 @@
 
 from ObjectListView import ObjectListView
 import itertools
-import wx
 
 
 class ObjectListViewTame(ObjectListView):

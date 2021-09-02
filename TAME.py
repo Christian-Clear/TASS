@@ -1197,7 +1197,12 @@ class MyFrame(mainWindow):
         
         if self.write_lopt_inp():  # if there are lines in the strans linelist
             self.write_lopt_par()
-            self.write_lopt_fixed()            
+            try:
+                self.write_lopt_fixed()   
+            except:
+                self.set_fixed_levels()
+                self.write_lopt_fixed()
+                
             self.frame_statusbar.SetStatusText('Running LOPT...')   
             
             try:
@@ -1363,10 +1368,11 @@ class fixedLevels(fixedLevelsDialog):
     def __init__(self, *args, **kwds):
         """Initilise and set the checkboxes of the current fixed levels."""
         fixedLevelsDialog.__init__(self, *args, **kwds)  
+        strans_levs = self.GetParent().strans_levs
         self.fixed_levels = [x for x in self.GetParent().lopt_fixed_levels if x != '']
+        self.fixed_levels = [x['label'] for x in strans_levs if x['label'] in self.fixed_levels]  # needed in case a user changes the label of a fixed level.
         self.fixed_level_lc.EnableCheckBoxes(True)
         self.fixed_level_lc.DeleteAllItems()
-        strans_levs = self.GetParent().strans_levs
                 
         for level in strans_levs:
             self.fixed_level_lc.Append([level['label'], f"{level['energy']:.4f}"])
@@ -1374,7 +1380,9 @@ class fixedLevels(fixedLevelsDialog):
         ticked_lev_idx = [strans_levs.index(x) for x in strans_levs if x['label'] in self.fixed_levels]
         with wx.EventBlocker(self):  # stops item checked event from firing
             for idx in ticked_lev_idx:
-                self.fixed_level_lc.CheckItem(idx)            
+                self.fixed_level_lc.CheckItem(idx)    
+        
+        
             
     def on_fixed_lev_checked(self, event):
         """User has checked the checkbox of a level. Update fixed_levels"""
@@ -1388,8 +1396,7 @@ class fixedLevels(fixedLevelsDialog):
     
     def on_fixed_lev_ok(self, event):
         """User has clicked OK button. Check that at least one level has been selected to be fixed."""
-        print(self.fixed_levels)
-        
+                
         if self.fixed_levels == []:  # no fixed level(s) selected
             wx.MessageBox('At least one level must be fixed.', 'Fixed Level Error', 
                           wx.OK | wx.ICON_EXCLAMATION)
