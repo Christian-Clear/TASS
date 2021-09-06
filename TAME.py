@@ -213,7 +213,7 @@ class MyFrame(mainWindow):
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
         self.df['user_desig'] = ''
-        self.df['line_tags'] = [{'ringing': False, 'noise': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
+        self.df['line_tags'] = [{'ringing': False, 'incorr_assign': False, 'noise': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
         self.df['comments'] = ''
         self.save_df()
         
@@ -576,7 +576,8 @@ class MyFrame(mainWindow):
                 self.lopt_line_listctrl.CheckItem(i, True)
 
         ### Update the checkboxes ###   
-        line_tags = line_dict['line_tags']        
+        line_tags = line_dict['line_tags']   
+        self.incorr_assign_chkbox.SetValue(line_tags['incorr_assign'])
         self.ringing_chkbox.SetValue(line_tags['ringing'])
         self.noise_chkbox.SetValue(line_tags['noise'])
         self.blend_chkbox.SetValue(line_tags['blend'])
@@ -981,6 +982,13 @@ class MyFrame(mainWindow):
         text = self.lopt_line_comments_txtctrl.GetValue()
         selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']
         self.update_df_cell(selected_wn, 'comments', text)
+             
+    def on_incorr_assign_tag(self, event): 
+        """Updates the main df with the user selected tag."""
+        selected_wn = self.lopt_lev_ojlv.GetSelectedObject()['wavenumber']         
+        line_tags = self.get_df_cell(selected_wn, 'line_tags')
+        line_tags['incorr_assign'] = self.incorr_assign_chkbox.GetValue()
+        self.update_df_cell(selected_wn, 'line_tags', line_tags)
 
     def on_ringing_tag(self, event):   
         """Updates the main df with the user selected tag."""
