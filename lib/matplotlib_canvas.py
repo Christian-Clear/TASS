@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
-# a class to make matplotib.backend_wxagg.FigureCanvasWxAgg compatible to wxGlade
+# a class to make matplotib.backend_wxagg.FigureCanvasWxAgg compatible with wxGlade
 
 import wx
 

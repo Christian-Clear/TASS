@@ -1302,7 +1302,7 @@ class MyFrame(mainWindow):
         self.new_proj.ShowModal()  
         
         try:
-            self.template_config_file = 'template.ini'
+            self.template_config_file = 'config/template.ini'
             self.new_config = configparser.ConfigParser()
             self.new_config.read(self.template_config_file)
             
@@ -1321,17 +1321,22 @@ class MyFrame(mainWindow):
             self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)            
             self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels for new project            
             self.new_config_file = self.new_proj.project_file_name + '.ini'
+            self.frame_statusbar.SetStatusText('Creating new project')
             
             with open(self.new_config_file, 'w') as configfile:
                 self.new_config.write(configfile)
                 
+            self.frame_statusbar.SetStatusText('Writing project configuration')                
             self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in self.new_proj.plot_files], ignore_index=True)
+            self.frame_statusbar.SetStatusText('Creating line database')
             self.plot_df.to_pickle(self.plot_df_file) 
+            self.frame_statusbar.SetStatusText('Saving line database to file')
             
             self.project_config_file = self.new_config_file
             
             self.main_config.set('project', 'project_config', self.project_config_file)
             self.save_main_config()
+            self.frame_statusbar.SetStatusText('Saving project configuration')
             
             self.load_project()          
             self.frame_statusbar.SetStatusText('New project created successfully')

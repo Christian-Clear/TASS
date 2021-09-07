@@ -7,6 +7,7 @@
 # License:      wxWindows license
 #----------------------------------------------------------------------------
 # Change log:
+# 2021-09-07  CPC   - Fixed depricated Python 2.x issues. Noted as CC edits in file.
 # 2009-06-09  JPP   - AutoSizeColumns() now updates space filling columns
 #                   - FastObjectListView.RepopulateList() now uses Freeze/Thaw
 #                   - Fixed bug with virtual lists being clearws when scrolled vertically

@@ -7,6 +7,7 @@
 # License:      wxWindows license
 #----------------------------------------------------------------------------
 # Change log:
+# 2021/09/07  CPC   Removed LongEditor and changed refernces to FloatEditor. Longs are depricated in Python 3.x. 
 # 2009/06/09  JPP   All cell editors start life 0 sized to prevent flickering
 # 2008/05/26  JPP   Fixed pyLint annoyances
 # 2008/04/04  JPP   Initial version complete
@@ -93,11 +94,7 @@ class EditorRegistry:
         self.typeToFunctionMap[six.text_type] = self._MakeStringEditor
         self.typeToFunctionMap[bool] = self._MakeBoolEditor
 
-        if six.PY2:
-            self.typeToFunctionMap[int] = self._MakeIntegerEditor
-            self.typeToFunctionMap[long] = self._MakeLongEditor
-        else:
-            self.typeToFunctionMap[int] = self._MakeLongEditor
+        self.typeToFunctionMap[int] = self._MakeFloatEditor
 
         self.typeToFunctionMap[float] = self._MakeFloatEditor
         self.typeToFunctionMap[datetime.datetime] = self._MakeDateTimeEditor
@@ -141,10 +138,6 @@ class EditorRegistry:
     @staticmethod
     def _MakeIntegerEditor(olv, rowIndex, subItemIndex):
         return IntEditor(olv, subItemIndex, validator=NumericValidator())
-
-    @staticmethod
-    def _MakeLongEditor(olv, rowIndex, subItemIndex):
-        return LongEditor(olv, subItemIndex)
 
     @staticmethod
     def _MakeFloatEditor(olv, rowIndex, subItemIndex):
@@ -248,26 +241,7 @@ class IntEditor(BaseCellTextEditor):
             value = repr(value)
         super(IntEditor, self).SetValue(value)
 
-#----------------------------------------------------------------------------
 
-
-class LongEditor(BaseCellTextEditor):
-
-    """This is a text editor for long values for use in an ObjectListView"""
-
-    def GetValue(self):
-        "Get the value from the editor"
-        s = super(LongEditor, self).GetValue().strip()
-        try:
-            return long(s)
-        except ValueError:
-            return None
-
-    def SetValue(self, value):
-        "Put a new value into the editor"
-        if isinstance(value, (long, int, float)):
-            value = repr(value)
-        super(LongEditor, self).SetValue(value)
 
 #----------------------------------------------------------------------------
 
