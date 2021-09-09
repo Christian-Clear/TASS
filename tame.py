@@ -19,9 +19,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 TAME_VERSION_STRING = 'Version: 0.0.1'
 
-
 class MyFrame(mainWindow):
+    """The main TAME window. Everything is run within this class."""
     def __init__(self, *args, **kwds):
+        """Initialise mainWindow, set constants etc. and then load the configs for tame."""
         mainWindow.__init__(self, *args, **kwds)
         
         self.set_constants()
@@ -61,7 +62,7 @@ class MyFrame(mainWindow):
         
         
     def configure_listviews(self):
-        """Set column definitions and settings for all object and group listviews."""
+        """Set column definitions and settings for all object and group listviews and basic wx.listctrls."""
         self.strans_lev_ojlv.SetColumns([
             ColumnDefn("Level", "left", 100, 'label', isEditable=True),
             ColumnDefn("J", "left", 50, 'j', stringConverter="%.1f", isEditable=True),
@@ -99,7 +100,7 @@ class MyFrame(mainWindow):
         
         self.lopt_lev_ojlv.SetEmptyListMsg("Run Level Optimisation first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
-        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)   
+        self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)  # Level energy column  
         
         self.lopt_line_listctrl.EnableCheckBoxes(True)
         self.levhams_level_listctrl.EnableCheckBoxes(True)
@@ -144,7 +145,7 @@ class MyFrame(mainWindow):
         return ''
         
     def correct_tags(self, tag):
-        """Correct formatting for virtual lines."""
+        """Correct formatting for virtual lines and line tags"""
         if str(tag) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return ''
         elif tag == 'b':
@@ -160,153 +161,6 @@ class MyFrame(mainWindow):
     
     ############################################################################
     
-        
-    def load_plot_df(self):
-        """Loads plot_df for the matplotlib plot from the user-selected Xgremlin ascii linelist files.
-        The plot_df file is created as part of the new project process."""
-        # path=os.path.dirname(self.plot_df_file)
-
-        # if not os.path.isfile(self.plot_df_file):  # if no existing DataFrame is present
-        #     self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
-        #     self.plot_df.to_pickle(self.plot_df_file) 
-        # else:
-        #     self.plot_df = pd.read_pickle(self.plot_df_file) 
-        self.plot_df = pd.read_pickle(self.plot_df_file) 
-        # self.plot_df.sort_values(by=['wavenumber'], ascending=True, inplace=True)
-        # self.plot_df.set_index('wavenumber', inplace=True, drop=True)
-
-         
-    def display_strans_levs(self):
-        """Writes values from a list to the strans_lev_ojlv ObjectListView"""
-        self.strans_lev_ojlv.SetObjects(self.strans_levs)
-       
-    def display_strans_lines(self):
-        """Writes lines with designations from self.df to the strans_lines_ojlv ObjectListView"""   
-        strans_lines = list(self.df.loc[self.df.main_desig.str.len() > 0 ].transpose().to_dict().values())  # convert to list of dicts
-        
-        for line in strans_lines:
-            main_level_string = ''
-            other_level_string = ''
-            for lev_pair in line['main_desig']:
-                if not main_level_string:
-                    sep = ''
-                else:
-                    sep = ';  \t'
-                main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
-                
-            for lev_pair in line['other_desig']:
-                if not other_level_string:
-                    sep = ''
-                else:
-                    sep = ',     '
-                other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
-                
-            line['eq width'] = float(np.log(line['eq width']))
-            line['main_desig'] = main_level_string
-            line['other_desig'] = other_level_string
-            
-        self.strans_lines_ojlv.SetObjects(strans_lines)             
-    
-    def create_df(self, lines_file):
-        """Creates a new pandas DataFrame from a list of lines in 'lines_file' and saves to a pickle file."""
-        self.df = pd.read_csv(lines_file, float_precision='high')  # create new dataframe from the input lines file 
-        self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
-        self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
-        self.df['user_desig'] = ''
-        self.df['line_tags'] = [{'ringing': False, 'incorr_assign': False, 'noise': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
-        self.df['comments'] = ''
-        self.save_df()
-        
-    def save_df(self):
-        """Saves the main pandas DataFrame self.df to the pickle file."""
-        self.df.to_pickle(self.df_file)    
-    
-    def main_strans(self, strans_levs):
-        """Runs strans for the main element under study"""
-        
-        if self.blank_strans_lev in strans_levs:
-            wx.MessageBox('STRANS input contains blank levels. \n\nPlease edit or delete these before running STRANS.', 'Blank Levels Found', 
-                          wx.OK | wx.ICON_EXCLAMATION)
-            self.frame_statusbar.SetStatusText('')
-            return False
-        
-        if not all(len(label) <= 10 for label in [lev['label'] for lev in strans_levs]):
-            wx.MessageBox('One or more level labels are too long. The maximum label length is 10 characters. \n\nPlease edit or delete these before running STRANS.', 'Level Label(s) Too Long', 
-                          wx.OK | wx.ICON_EXCLAMATION)
-            self.frame_statusbar.SetStatusText('')
-            return False
-                     
-        self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in main_desig column with empty lists
-        desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()
-          
-        matched_lines = self.strans(strans_levs, desig_list, self.main_element_name)          
-        self.df.update(matched_lines)  
-        self.display_strans_lines()
-
-        return True    
-        
-    def other_strans(self, other_lev_list):
-        """Runs strans for all other elements that could be present in the linelist"""                     
-        self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in other_desig column with empty lists
-        desig_list = self.df[['wavenumber', 'other_desig', 'line_tags']].values.tolist()
-        
-        for other_lev in other_lev_list:
-            element_name, level_file = other_lev.split(',')
-            strans_levs = list(pd.read_csv(level_file).transpose().to_dict().values())
-            matched_lines = self.strans(strans_levs, desig_list, element_name)
-
-        self.df.update(matched_lines)  
-        self.display_strans_lines()
-
-    def strans(self, strans_levs, desig_list, element_name):
-        """Creates list of all possible transitions between levels of opposite parity that obey
-        the J selection rule. The list is then compared to all lines in the self.db database and lines with 
-        wavenumbers that match within self.strans_wn_discrim are assigned the labels of the even and odd level."""
-                    
-        self.frame_statusbar.SetStatusText(f'Running Line Matching for {element_name}')
-                
-        strans_levs_even = [x for x in strans_levs if x['parity']==1]
-        strans_levs_odd = [x for x in strans_levs if x['parity']==0]
-        
-        strans_levs_even = sorted(strans_levs_even, key=lambda x: x['j'])
-        strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x['j'])
-        
-        for even_lev in strans_levs_even:    
-            j_even = even_lev['j']
-            
-            if j_even == 0.0:  # J selection rule J != 0 to 0
-                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)
-            else:  # the other J selection 
-                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even - 1)
-                
-            right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)
-                            
-            for odd_lev in strans_levs_odd[left_j:right_j]:                
-                label_even = even_lev['label']
-                label_odd = odd_lev['label']
-                energy_even = even_lev['energy']
-                energy_odd = odd_lev['energy']                   
-                match_wn = abs(energy_even - energy_odd)
-                    
-                left = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn - self.strans_wn_discrim)
-                right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + self.strans_wn_discrim)
-                    
-                for matched_line in desig_list[left:right]:
-                    
-                    if len(desig_list[left:right]) > 1:  # multiple lines match this transtion
-                        matched_line[2]['multiple_lines'] = True
-                    
-                    if energy_even > energy_odd:  # assign upper and lower levels correctly (LOPT needs them in lower-upper format)
-                        upper_lev = label_even
-                        lower_lev = label_odd
-                    else:
-                        upper_lev = label_odd
-                        lower_lev = label_even
-                        
-                    matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})
-        
-        return desig_list
-        
     def load_main_config(self):
         """Reads the main TAME config file and sets variables accordingly"""
         self.main_config_file = 'config/tame.ini'
@@ -360,6 +214,160 @@ class MyFrame(mainWindow):
         self.display_strans_levs() 
         self.load_lopt_lev_comments()
         self.SetTitle(f"Term Analysis Made Easy (TAME) - {self.project_title}")
+    
+        
+    def load_plot_df(self):
+        """Loads plot_df for the matplotlib plot from the user-selected Xgremlin ascii linelist files.
+        The plot_df file is created as part of the new project process."""
+        # path=os.path.dirname(self.plot_df_file)
+
+        # if not os.path.isfile(self.plot_df_file):  # if no existing DataFrame is present
+        #     self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in glob.glob(path + "/*.asc")], ignore_index=True)
+        #     self.plot_df.to_pickle(self.plot_df_file) 
+        # else:
+        #     self.plot_df = pd.read_pickle(self.plot_df_file) 
+        self.plot_df = pd.read_pickle(self.plot_df_file) 
+        # self.plot_df.sort_values(by=['wavenumber'], ascending=True, inplace=True)
+        # self.plot_df.set_index('wavenumber', inplace=True, drop=True)
+
+          
+    
+    def create_df(self, lines_file):
+        """Creates a new pandas DataFrame from a list of lines in 'lines_file' and saves to a pickle file."""
+        self.df = pd.read_csv(lines_file, float_precision='high')  # create new dataframe from the input lines file 
+        self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
+        self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # append column of empty lists.
+        self.df['user_desig'] = ''
+        self.df['line_tags'] = [{'ringing': False, 'incorr_assign': False, 'noise': False, 'blend': False, 'user_unc': False, 'multiple_lines':False} for x in range(self.df.shape[0])]
+        self.df['comments'] = ''
+        self.save_df()
+        
+    def save_df(self):
+        """Saves the main pandas DataFrame self.df to the pickle file."""
+        self.df.to_pickle(self.df_file)    
+    
+    def main_strans(self, strans_levs):
+        """Runs strans for the main element under study"""
+        
+        if self.blank_strans_lev in strans_levs:
+            wx.MessageBox('STRANS input contains blank levels. \n\nPlease edit or delete these before running STRANS.', 'Blank Levels Found', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.frame_statusbar.SetStatusText('')
+            return False
+        
+        if not all(len(label) <= 10 for label in [lev['label'] for lev in strans_levs]):
+            wx.MessageBox('One or more level labels are too long. The maximum label length is 10 characters. \n\nPlease edit or delete these before running STRANS.', 'Level Label(s) Too Long', 
+                          wx.OK | wx.ICON_EXCLAMATION)
+            self.frame_statusbar.SetStatusText('')
+            return False
+                     
+        self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in main_desig column with empty lists
+        desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()
+          
+        matched_lines = self.strans(strans_levs, desig_list, self.main_element_name)          
+        self.df.update(matched_lines)  # update the main df with designations from strans
+        self.display_strans_lines()
+
+        return True    
+        
+    def other_strans(self, other_lev_list):
+        """Runs strans for all other elements that could be present in the linelist"""                     
+        self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in other_desig column with empty lists
+        desig_list = self.df[['wavenumber', 'other_desig', 'line_tags']].values.tolist()
+        
+        for other_lev in other_lev_list:
+            element_name, level_file = other_lev.split(',')
+            strans_levs = list(pd.read_csv(level_file).transpose().to_dict().values())
+            matched_lines = self.strans(strans_levs, desig_list, element_name)
+
+        self.df.update(matched_lines)  # update the main df with designations from strans  
+        self.display_strans_lines()
+
+    def strans(self, strans_levs, desig_list, element_name):
+        """Creates list of all possible transitions between levels of opposite parity that obey
+        the J selection rule. The list is then compared to all lines in the self.df database and lines with 
+        wavenumbers that match within self.strans_wn_discrim are assigned the labels of the even and odd level.
+        Inputs:
+            strans_levs: list of levels to be used in strans
+            desig_list: list of line dicts to be matched by strans
+            element_name: name of level's element'
+        """
+                    
+        self.frame_statusbar.SetStatusText(f'Running Line Matching for {element_name}')
+                
+        strans_levs_even = [x for x in strans_levs if x['parity']==1]
+        strans_levs_odd = [x for x in strans_levs if x['parity']==0]
+        
+        strans_levs_even = sorted(strans_levs_even, key=lambda x: x['j'])  # sorting by j value.
+        strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x['j'])
+        
+        for even_lev in strans_levs_even:    
+            j_even = even_lev['j']
+            
+            if j_even == 0.0:  # J selection rule J != 0 to 0
+                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)  # returns index of leftmost match
+            else:  # the other J selection 
+                left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even - 1)
+                
+            right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)  # returns index of leftmost match
+                            
+            for odd_lev in strans_levs_odd[left_j:right_j]:  # strans_levs_odd now reduced to levels with J values in line with selection rules.             
+                label_even = even_lev['label']
+                label_odd = odd_lev['label']
+                energy_even = even_lev['energy']
+                energy_odd = odd_lev['energy']                   
+                match_wn = abs(energy_even - energy_odd)
+                    
+                left = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn - self.strans_wn_discrim)  # x[0] is line wavenumber
+                right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + self.strans_wn_discrim)
+                    
+                for matched_line in desig_list[left:right]:
+                    
+                    if len(desig_list[left:right]) > 1:  # multiple lines match this transtion
+                        matched_line[2]['multiple_lines'] = True
+                    
+                    if energy_even > energy_odd:  # assign upper and lower levels correctly (LOPT needs them in lower-upper format)
+                        upper_lev = label_even
+                        lower_lev = label_odd
+                    else:
+                        upper_lev = label_odd
+                        lower_lev = label_even
+                        
+                    matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})  # this is being added to the lines in desig_list that were matched.
+        
+        return desig_list
+    
+             
+    def display_strans_levs(self):
+        """Writes values from self.strans_levs list to the strans_lev_ojlv ObjectListView"""
+        self.strans_lev_ojlv.SetObjects(self.strans_levs)
+       
+    def display_strans_lines(self):
+        """Writes lines with designations from self.df to the strans_lines_ojlv ObjectListView"""   
+        strans_lines = list(self.df.loc[self.df.main_desig.str.len() > 0 ].transpose().to_dict().values())  # convert to list of dicts
+        
+        for line in strans_lines:
+            main_level_string = ''
+            other_level_string = ''
+            for lev_pair in line['main_desig']:
+                if not main_level_string:
+                    sep = ''
+                else:
+                    sep = ';  \t'
+                main_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
+                
+            for lev_pair in line['other_desig']:
+                if not other_level_string:
+                    sep = ''
+                else:
+                    sep = ',     '
+                other_level_string += sep + lev_pair['element_name'] + ': ' + lev_pair['upper_level'] + ' - ' + lev_pair['lower_level']
+                
+            line['eq width'] = float(np.log(line['eq width']))
+            line['main_desig'] = main_level_string
+            line['other_desig'] = other_level_string
+            
+        self.strans_lines_ojlv.SetObjects(strans_lines)   
     
     def save_project(self):
         """Saves the project."""

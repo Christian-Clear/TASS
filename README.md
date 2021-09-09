@@ -8,15 +8,34 @@ To download the latest TAME version or submit bug reports and improvement sugges
 
 ## Installation
 
-The program is unstable and experimental right now, so installation is a
-little tricky. Here's what I'm doing to install.
+tame is written entirely in Python and runs through the Python interpreter. As python is not a compiled language, libraries that \tame depends on must be installed on each computer that runs it. Luckily, there is an easy way to accomplish this! 
 
-```bash
-pip install -U .
-sudo ln -s share/applications/com.codemouse92.thataway.desktop /usr/share/applications/
-xdg-settings set default-web-browser thataway.desktop
-```
+The popular scientific toolkit for python, Anaconda, is able to run programs within specific environments. Included in the tame files is the YAML file, tame.yml, which contains all of the information Anaconda (specifically the package manager Conda) needs to create an environment with exactly the correct packages (and versions of packages) for tame to run correctly.
 
-(Please don't `sudo pip install`. Ever. Even here.)
+To create the Anaconda environment, first download and install Anaconda. Then navigate to the tame files and create the tame environment:
 
+`(base) user@host: cd <main tame directory /resources>`
 
+`(base) user@host: conda create env --file tame.yml`
+
+this will create the TASS environment in your main Anaconda /envs folder. If you wish the tame environment to be saved elsewhere, then you should use --prefix tag:
+
+`(base) user@host: conda create env --file tame.yml --prefix ./<directory>`
+
+The creation of the environment may take some time (there are a lot of libraries to be installed!).
+
+## Running TAME
+
+Once the tame environment has been created, you need to activate it:
+
+`(base) user@host: conda activate tame`
+
+`(tame) user@host: `
+
+(note the change from base to tame in the brackets of the terminal).
+
+You can now run tame from within the tame environment (you will need to navigate to the main tame folder):
+
+`(tame) user@host: cd <main tame directory>`
+
+`(tame) user@host: python tame.py`
