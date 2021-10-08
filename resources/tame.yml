@@ -1,4 +1,4 @@
-name: tame_export_test
+name: tame
 channels:
   - conda-forge
   - defaults
@@ -233,4 +233,4 @@ dependencies:
   - zstd=1.4.9=ha95c52a_0
   - pip:
     - wxpython==4.1.1
-prefix: /home/christian/anaconda3/envs/tame_export_test
+prefix: /home/christian/anaconda3/envs/tame

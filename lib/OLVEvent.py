@@ -293,6 +293,9 @@ class SortEvent(VetoableEvent):
         The OLV will handle other tasks like updating sort indicators
         """
         self.wasHandled = wasHandled
+        
+    def GetSortColumn(self):  # added by CPC to determine which column was sorted
+        return self.sortColumnIndex
 
 #----------------------------------------------------------------------------
 

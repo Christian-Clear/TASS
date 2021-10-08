@@ -71,7 +71,9 @@ class MyFrame(mainWindow):
     
         self.strans_lev_ojlv.cellEditMode = self.strans_lev_ojlv.CELLEDIT_DOUBLECLICK
         self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_FINISHED, self.on_finish_strans_lev_edit)
-        self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_STARTING, self.on_start_strans_lev_edit)
+        self.strans_lev_ojlv.Bind(OLVEvent.EVT_CELL_EDIT_STARTING, self.on_start_strans_lev_edit)  
+        self.strans_lev_ojlv.Bind(OLVEvent.EVT_SORT, self.on_strans_lev_sort)
+        self.strans_lev_ojlv.SetEmptyListMsg("")
                 
         self.strans_lines_ojlv.SetColumns([
             ColumnDefn(f'Wavenumber ({self.cm_1})', 'left', 150, 'wavenumber', stringConverter="%.4f"),
@@ -83,7 +85,7 @@ class MyFrame(mainWindow):
             ColumnDefn('Main Element Transitions', 'left', 500, 'main_desig'),
             ColumnDefn('Other Element Transitions', 'left', 500, 'other_desig', isSpaceFilling=True)])
         
-        self.strans_lines_ojlv.SetEmptyListMsg("Run Line Matching first")
+        self.strans_lines_ojlv.SetEmptyListMsg("Run Line Matching")
         
         self.group_column = ColumnDefn(f'Level ({self.cm_1})', 'left', 100, 'main_level', stringConverter="%.4f", groupKeyConverter=self.loptGroupKeyConverter)       
         self.lopt_lev_ojlv.SetColumns([
@@ -101,7 +103,20 @@ class MyFrame(mainWindow):
         self.lopt_lev_ojlv.SetEmptyListMsg("Run Level Optimisation first")
         self.lopt_lev_ojlv.SetShowItemCounts(False)
         self.lopt_lev_ojlv.SetAlwaysGroupByColumn(1)  # Level energy column  
+        self.lopt_lev_ojlv.Bind(OLVEvent.EVT_SORT, self.on_lopt_lev_sort)
         
+        
+        self.levhams_output_ojlv.SetColumns([
+            ColumnDefn(f'Level Energy ({self.cm_1})', 'left', 150, 'energy', stringConverter=self.levhams_float_converter_4),
+            ColumnDefn(f'Line Wn ({self.cm_1})', 'left', 130, 'wavenumber', stringConverter=self.levhams_float_converter_4),
+            ColumnDefn('SNR', 'left', 50, 'peak', stringConverter=self.levhams_float_converter_0),
+            ColumnDefn('Intensity', 'left', 70, 'eq width', stringConverter=self.levhams_log_ew_converter),
+            ColumnDefn('Level', 'left', 100, 'level'),
+            ColumnDefn('J', 'left', 40, 'j'),
+            ColumnDefn(f'Predicted Energy ({self.cm_1})', 'left', 170, 'pred_energy', stringConverter=self.levhams_float_converter_4),
+            ColumnDefn(f'Average Energy ({self.cm_1})', 'left', 170, 'avg_energy', stringConverter=self.levhams_float_converter_4),
+            ColumnDefn(f'Separation ({self.cm_1})', 'left', 170, 'sep', stringConverter=self.levhams_float_converter_4)])        
+                
         self.lopt_line_listctrl.EnableCheckBoxes(True)
         self.levhams_level_listctrl.EnableCheckBoxes(True)
         
@@ -109,6 +124,18 @@ class MyFrame(mainWindow):
         
 
     ### String/Group Converters for Object and Group Listviews #################
+    def levhams_float_converter_4(self, num):
+        try:
+            return f'{float(num):.4f}'
+        except:
+            return ''
+        
+    def levhams_float_converter_0(self, num):
+        try:
+            return f'{float(num):.0f}'
+        except:
+            return ''
+    
     def loptGroupKeyConverter(self, energy):
         """Convert energy of group to the level designation."""
         selected_line_index = self.lopt_levs.loc[self.lopt_levs['Energy'] == energy].index.values[0]
@@ -119,6 +146,13 @@ class MyFrame(mainWindow):
         if str(log_ew) == 'nan':  # Correct formatting if this is a virtual line from LOPT.
             return '-'
         return f'{log_ew:.2f}'
+    
+    def levhams_log_ew_converter(self, log_ew):
+        """Convert equivalent width (from .lin file) to log(ew)."""  # XXX Check that this is right? log_ew to log(ew)?
+        try:
+            return f'{np.log(log_ew):.2f}'
+        except:
+            return ''
     
     def wn_converter(self, wn):
         """Convert wn to 4 decimal places."""
@@ -310,7 +344,7 @@ class MyFrame(mainWindow):
                 left_j = bisect.bisect_left(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even - 1)
                 
             right_j = bisect.bisect_right(KeyList(strans_levs_odd, key=lambda x: x['j']), j_even + 1)  # returns index of leftmost match
-                            
+               
             for odd_lev in strans_levs_odd[left_j:right_j]:  # strans_levs_odd now reduced to levels with J values in line with selection rules.             
                 label_even = even_lev['label']
                 label_odd = odd_lev['label']
@@ -322,6 +356,7 @@ class MyFrame(mainWindow):
                 right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + self.strans_wn_discrim)
                     
                 for matched_line in desig_list[left:right]:
+                    #matched line is a list of:[line wavenumber, [level assignment dicts], {line tags}]
                     
                     if len(desig_list[left:right]) > 1:  # multiple lines match this transtion
                         matched_line[2]['multiple_lines'] = True
@@ -334,7 +369,7 @@ class MyFrame(mainWindow):
                         lower_lev = label_even
                         
                     matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})  # this is being added to the lines in desig_list that were matched.
-        
+                                        
         return desig_list
     
              
@@ -786,8 +821,7 @@ class MyFrame(mainWindow):
     def display_levhams_levs(self, levels):
         """Add the list of grouped level lines from levhams to the listctrl if there are >= the number of selected lines
         in each group. Also highlights the summary row."""
-               
-        self.levhams_output_listctrl.DeleteAllItems()        
+                     
         num_levels = 0
         
         for level in levels:            
@@ -796,20 +830,11 @@ class MyFrame(mainWindow):
                 num_levels += 1
                 
                 for line in level:
-                    self.levhams_output_listctrl.Append([f"{line['energy']:.4f}", 
-                                                         f"{line['wavenumber']:.4f}",
-                                                         f"{np.log(line['eq width']):.2f}",
-                                                         line['level'],
-                                                         line['j'],
-                                                         f"{line['pred_energy']:.4f}",                                                         
-                                                         ''])
+                    self.levhams_output_ojlv.AddObject(line)
                     sum_lines += line['pred_energy']
-                    
-                self.levhams_output_listctrl.Append(['', '', '', '', '', '',
-                                                     f"{sum_lines/len(level):.4f}"])
                 
-                self.levhams_output_listctrl.SetItemBackgroundColour(self.levhams_output_listctrl.GetItemCount()-1, self.groupHeaderColour)
-                self.levhams_output_listctrl.Append(['', '', '', '', '', '',''])  # blank line
+                sep = level[-1]['pred_energy'] - level[0]['pred_energy']  # the separation in the level (highest predicted energy minus the lowest) 
+                self.levhams_output_ojlv.AddObject({'avg_energy': sum_lines/len(level), 'sep': sep})
                 
         self.frame_statusbar.SetStatusText(f'{num_levels} predicted levels found.')
         
@@ -821,6 +846,33 @@ class MyFrame(mainWindow):
       
         
 ### Event-driven functions ###  
+
+    def on_lopt_lev_sort(self, event):
+        """Handles clicks on the columns 0 and 10 which otherwise raise exceptions due to TypeErrors."""
+        if event.GetSortColumn() == 0:  # group expand/contract column
+            event.Veto()
+            num_expanded = 0
+            
+            for group in self.lopt_lev_ojlv.groups:  # works out if more than 10 groups are expanded
+                if group.isExpanded == True:
+                    num_expanded +=1
+                    
+            if num_expanded <= 10:
+                self.lopt_lev_ojlv.ExpandAll()
+            else:
+                self.lopt_lev_ojlv.CollapseAll()             
+            
+        elif event.GetSortColumn() == 10:  # tags column
+            event.Veto()
+            
+
+    def on_strans_lev_sort(self, event):
+        print(event.GetSortColumn())
+        # XXX may want tp put a custom sort in here for the strans levels if the user selects parity to sort by
+
+    def on_levhams_right_click(self, event):  
+        self.PopupMenu(LevhamsPopupMenu(self))
+        
 
     def on_notebook_page_change(self, event): 
         """Detects a change in notebook page. This is needed to ensure that the LEVHAMS page always uses the most
@@ -1568,6 +1620,26 @@ class newProject(newProjectDialog):
                 # SAVE all parameters to a new config file.
                 self.Destroy()
                 
+
+class LevhamsPopupMenu(wx.Menu):
+
+    def __init__(self, parent):
+        super(LevhamsPopupMenu, self).__init__()
+        self.parent = parent
+
+        ami = wx.MenuItem(self, wx.NewId(), 'Add level to line(s) matching')
+        self.Append(ami)
+        self.Bind(wx.EVT_MENU, self.OnAdd, ami)
+
+    def OnAdd(self, event):
+        for level in self.parent.levhams_output_ojlv.GetSelectedObjects():
+            if 'avg_energy' in level.keys():
+                self.parent.strans_levs.insert(0, {'label': '', 'j':0.0 , 'energy':level['avg_energy'] , 'parity':0})  # inserts blank line at head of the table
+                self.parent.display_strans_levs()
+                self.parent.main_panel.ChangeSelection(0)
+            
+
+        
                 
 class preferenceDialog(propertiesDialog):
     def __init__(self, *args, **kwds):   

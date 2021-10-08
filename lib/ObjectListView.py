@@ -1665,14 +1665,18 @@ class ObjectListView(wx.ListCtrl):
         evt.Skip()
 
         # Test for a mouse down on the image of the check box column
-        if self.InReportView():
-            (row, flags, subitem) = self.HitTestSubItem(evt.GetPosition())
-        else:
-            (row, flags) = self.HitTest(evt.GetPosition())
-            subitem = 0
-
-        if flags == wx.LIST_HITTEST_ONITEMICON:
-            self._HandleLeftDownOnImage(row, subitem)
+        
+        try:  # added by CPC to avoid problems with cells having NoneType is they are empty
+            if self.InReportView():
+                (row, flags, subitem) = self.HitTestSubItem(evt.GetPosition())
+            else:
+                (row, flags) = self.HitTest(evt.GetPosition())
+                subitem = 0
+    
+            if flags == wx.LIST_HITTEST_ONITEMICON:
+                self._HandleLeftDownOnImage(row, subitem)
+        except:
+            return
 
     def _HandleLeftDownOnImage(self, rowIndex, subItemIndex):
         """
@@ -3417,6 +3421,9 @@ class ListGroup(object):
         Add the given model to those that belong to this group.
         """
         self.modelObjects.append(model)
+    
+    # def GetExpandedStatus(self):
+    #     return self.isExpanded()
 
 
 #######################################################################
