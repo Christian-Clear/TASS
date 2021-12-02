@@ -1,0 +1,24 @@
+Designation	Energy	D1	D2	D3	N_lines	Comments
+d9  2D2	0	0	0	_[3]	0	fixed by user
+s2  4F4	51045.5256	0.0069	0.71	0.0079	5	
+s2  4F3	52206.014	0.015	0.71	0.046	4	
+s2  4F2	53037.942	0.027	2.0	0.026[2]	1	
+s2  4F1	53601.192	0.042	2.0	0.042[2]	1	
+3F5p  4D3	103652.9	0	2.0	_[11]	0	fixed by user
+3F5p  2G4	104080.9150	0.0095	2.0	_	1	fixed by user
+3F5p  4G5	104147.205	0.030	2.0	0.027	1	fixed by user
+3F5p  4F4	104298.092	0.012	2.0	0.013	1	fixed by user
+3F5p  4D2	104503.1	0	2.0	_[10]	0	fixed by user
+3F5p    3	104646.382	0.024	2.0	0.031	2	fixed by user
+3F5p  4D1	105439.7	0	2.0	_[9]	0	fixed by user
+3F5p  4G3	105498.896	0.030	2.0	0.055	1	fixed by user
+3F5p  4G4	105588.710	0.032	2.0	0.033	1	fixed by user
+3F5p  4F2	105668.621	0.030	2.0	0.055	1	fixed by user
+3F5p  2F3	105837.880	0.027	2.0	0.053	1	fixed by user
+3F5p  2D2	105861.0	0	2.0	_[5]	0	fixed by user
+3F5p  4D0	106022.6	0	2.0	_[8]	0	fixed by user
+3F5p  4G2	106283.0	0	2.0	_[12]	0	fixed by user
+3F5p  4F1	106369.14	0	2.00	_[2]	0	fixed by user
+3F5p  2G3	106620.4	0	2.0	_[7]	0	fixed by user
+3F5p  2F2	107082.0	0	2.0	_[6]	0	fixed by user
+3F5p  2D1	107141.9	0	2.0	_[4]	0	fixed by user

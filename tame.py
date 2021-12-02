@@ -494,6 +494,14 @@ class MyFrame(mainWindow):
                         
                             lopt_str = f'{snr}{wn} cm-1 {unc}{lower_level}{upper_level}{tag}\n'
                             inp_file.writelines(lopt_str)
+                            
+            # for level in self.lopt_fixed_levels[1:]:  # skip ground
+            #     strans_lev = next((item for item in self.strans_levs if item['label']==level))
+            #     lev_energy = strans_lev['energy'] 
+                
+            #     lopt_str = f'     9999{lev_energy:>15} cm-1 0.0000{self.lopt_fixed_levels[0]:>12}{level:>12}\n'
+            #     inp_file.writelines(lopt_str)
+                
         return True
                
     def write_lopt_par(self):
@@ -521,7 +529,7 @@ class MyFrame(mainWindow):
                 else:
                     lev_unc = f'{2.0:.4f}'
                              
-                fixed_strings.append(f'{level:>9}{lev_energy:>9.2f}{lev_unc:>13}\n')
+                fixed_strings.append(f'{level:>9}{lev_energy:>13.4f}{lev_unc:>13}\n')
             
             fixed_file.writelines(fixed_strings)    
             
@@ -646,29 +654,31 @@ class MyFrame(mainWindow):
     def plot_lopt_line(self, wavenumber, peak, width):   
         """Plots the spectra from self.plot_df to the matplotlib plot. There are scaling factors that can be changed to show
         more/less of the plot area."""
-        plot_width = self.lopt_plot_width / 2  # as this is total width
-        # plot_y_scale = 1.1
-        # plot_x_scale = 5.
-        self.matplotlib_canvas.clear()  
-        ax = self.matplotlib_canvas.gca()   
-        
-        low = abs(self.plot_df['wavenumber'] - (wavenumber-plot_width)).idxmin() + 1
-        high = abs(self.plot_df['wavenumber'] - (wavenumber+plot_width)).idxmin() + 1
-        df_part = self.plot_df.iloc[low:high]
-           
-        spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
 
-        for spectra in spectras:
-            df_part.plot(kind='line', x='wavenumber', y=spectra, ax=ax)
-
-        self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
-        self.matplotlib_canvas.axes.set_ylabel('SNR')
-        ax.ticklabel_format(useOffset=False)
-        # ax.set_ylim([df_part.min().min()*plot_y_scale, peak*plot_y_scale])
-        #ax.set_xlim([wavenumber - (width/1000)*plot_x_scale, wavenumber + (width/1000)*plot_x_scale])
-        # ax.axvline(x=wavenumber)  # due to calibration this is not in the right place and looks odd
-
-        self.matplotlib_canvas.draw()     
+        if not self.plot_df.empty:  # plot_df will be empty if the user did not select any plot files at project creation
+            plot_width = self.lopt_plot_width / 2  # as this is total width
+            # plot_y_scale = 1.1
+            # plot_x_scale = 5.
+            self.matplotlib_canvas.clear()  
+            ax = self.matplotlib_canvas.gca()   
+            
+            low = abs(self.plot_df['wavenumber'] - (wavenumber-plot_width)).idxmin() + 1
+            high = abs(self.plot_df['wavenumber'] - (wavenumber+plot_width)).idxmin() + 1
+            df_part = self.plot_df.iloc[low:high]
+               
+            spectras = df_part.columns[df_part.notna().any()].tolist()[1:]  # gives columns that do not contain only NaN.
+    
+            for spectra in spectras:
+                df_part.plot(kind='line', x='wavenumber', y=spectra, ax=ax)
+    
+            self.matplotlib_canvas.axes.set_xlabel('Wavenumber (cm-1)')
+            self.matplotlib_canvas.axes.set_ylabel('SNR')
+            ax.ticklabel_format(useOffset=False)
+            # ax.set_ylim([df_part.min().min()*plot_y_scale, peak*plot_y_scale])
+            #ax.set_xlim([wavenumber - (width/1000)*plot_x_scale, wavenumber + (width/1000)*plot_x_scale])
+            # ax.axvline(x=wavenumber)  # due to calibration this is not in the right place and looks odd
+    
+            self.matplotlib_canvas.draw()     
     
     def display_lopt_lev(self, level):
         """Display info about the LOPT level. Also the user comments."""
@@ -1275,7 +1285,7 @@ class MyFrame(mainWindow):
             
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='lopt/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-                # print(p)
+                print(p)
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  
@@ -1361,51 +1371,58 @@ class MyFrame(mainWindow):
         self.new_proj = newProject(self)
         self.new_proj.ShowModal()  
         
-        try:
-            self.template_config_file = 'config/template.ini'
-            self.new_config = configparser.ConfigParser()
-            self.new_config.read(self.template_config_file)
-            
-            self.new_config.set('files', 'strans_lev_file', self.new_proj.main_element_lev_file)
-            self.new_config.set('files', 'strans_lin_file', self.new_proj.linelist_file)
-            self.new_config.set('files', 'df_file', self.new_proj.df_file)
-            self.plot_df_file = self.new_proj.project_file_name + '_plot.pkl'
-            self.new_config.set('files', 'plot_file', self.plot_df_file)              
-            self.new_config.set('files', 'lopt_lev_comments_file', self.new_proj.project_file_name + '_lev_comments.pkl')
-           
-            other_lev_files = ''
-            for file in self.new_proj.other_element_lev_files:
-                other_lev_files += f'{file["shortname"]},{file["filename"]}\n'
-            self.new_config.set('files', 'other_lev_files', other_lev_files)            
-            self.new_config.set('tame', 'project_title', self.new_proj.project_name)
-            self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)            
-            self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels for new project            
-            self.new_config_file = self.new_proj.project_file_name + '.ini'
-            self.frame_statusbar.SetStatusText('Creating new project')
-            
-            with open(self.new_config_file, 'w') as configfile:
-                self.new_config.write(configfile)
-                
-            self.frame_statusbar.SetStatusText('Writing project configuration')                
+        #try:
+        self.template_config_file = 'config/template.ini'
+        self.new_config = configparser.ConfigParser()
+        self.new_config.read(self.template_config_file)
+        
+        self.new_config.set('files', 'strans_lev_file', self.new_proj.main_element_lev_file)
+        self.new_config.set('files', 'strans_lin_file', self.new_proj.linelist_file)
+        self.new_config.set('files', 'df_file', self.new_proj.df_file)
+        self.plot_df_file = self.new_proj.project_file_name + '_plot.pkl'
+        self.new_config.set('files', 'plot_file', self.plot_df_file)              
+        self.new_config.set('files', 'lopt_lev_comments_file', self.new_proj.project_file_name + '_lev_comments.pkl')
+       
+        other_lev_files = ''
+        for file in self.new_proj.other_element_lev_files:
+            other_lev_files += f'{file["shortname"]},{file["filename"]}\n'
+        self.new_config.set('files', 'other_lev_files', other_lev_files)            
+        self.new_config.set('tame', 'project_title', self.new_proj.project_name)
+        self.new_config.set('tame', 'main_element_name', self.new_proj.main_element_name)            
+        self.new_config.set('lopt', 'fixed_levels', '')  # no fixed levels for new project            
+        self.new_config_file = self.new_proj.project_file_name + '.ini'
+        self.frame_statusbar.SetStatusText('Creating new project')
+        
+        with open(self.new_config_file, 'w') as configfile:
+            self.new_config.write(configfile)
+
+        self.frame_statusbar.SetStatusText('Writing project configuration')  
+        
+        if self.new_proj.plot_files:  # if plot files have been selected by the user
             self.plot_df = pd.concat([pd.read_csv(f, skiprows=4, delim_whitespace=True, names=['wavenumber', f'{f.split("/")[-1].split(".")[0]}']) for f in self.new_proj.plot_files], ignore_index=True)
-            self.frame_statusbar.SetStatusText('Creating line database')
-            self.plot_df.to_pickle(self.plot_df_file) 
-            self.frame_statusbar.SetStatusText('Saving line database to file')
+            self.frame_statusbar.SetStatusText('Creating line plot database')
+
+        else:
+            self.plot_df = pd.DataFrame(columns=['wavenumber', 'file'])  # blank dataframe
             
-            self.project_config_file = self.new_config_file
+        self.plot_df.to_pickle(self.plot_df_file) 
+        self.frame_statusbar.SetStatusText('Saving line plot database to file')
+        
+        self.project_config_file = self.new_config_file
+        
+        self.main_config.set('project', 'project_config', self.project_config_file)
+        self.save_main_config()
+        self.frame_statusbar.SetStatusText('Saving project configuration')
+        
+        self.load_project()          
+        self.frame_statusbar.SetStatusText('New project created successfully')
+        self.strans_lines_ojlv.DeleteAllItems()
+        self.lopt_lev_ojlv.DeleteAllItems()
+        self.main_panel.ChangeSelection(0)
             
-            self.main_config.set('project', 'project_config', self.project_config_file)
-            self.save_main_config()
-            self.frame_statusbar.SetStatusText('Saving project configuration')
-            
-            self.load_project()          
-            self.frame_statusbar.SetStatusText('New project created successfully')
-            self.strans_lines_ojlv.DeleteAllItems()
-            self.lopt_lev_ojlv.DeleteAllItems()
-            self.main_panel.ChangeSelection(0)
-            
-        except AttributeError:  # if the user cancelled the new project process.
-            event.Skip()
+        # except AttributeError:  # if the user cancelled the new project process.
+        #     print('uh oh')
+        #     event.Skip()
   
     def on_about(self, event):  
         """Displays the about dialog."""
@@ -1531,6 +1548,8 @@ class newProject(newProjectDialog):
         self.other_element_levs_ojlv.SetEmptyListMsg('')
         self.other_element_levs_ojlv.cellEditMode = self.other_element_levs_ojlv.CELLEDIT_SINGLECLICK
         
+        self.plot_files = None  # in case the user does not specify plot files
+        
     def on_project_file_btn(self, event):
         
         with wx.DirDialog (None, "Select Project Folder", "", wx.DD_DEFAULT_STYLE) as fileDialog:
@@ -1544,6 +1563,7 @@ class newProject(newProjectDialog):
         
     def on_main_lev_file_btn(self, event):
         with wx.FileDialog(self, "Select Main Element Level File", wildcard="level files (*.lev)|*.lev",
+                       defaultDir=self.project_path,
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
@@ -1554,6 +1574,7 @@ class newProject(newProjectDialog):
 
     def on_linelist_file_btn(self, event):  # wxGlade: NewProjectFrame.<event_handler>
         with wx.FileDialog(self, "Select Linelist File", wildcard="linelist files (*.lin)|*.lin",
+                       defaultDir=self.project_path,
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
@@ -1564,14 +1585,17 @@ class newProject(newProjectDialog):
 
     def on_plot_files_btn(self, event):  # wxGlade: NewProjectFrame.<event_handler>
         with wx.FileDialog(self, "Select linelist file", wildcard="plot files (*.asc)|*.asc",
+                       defaultDir=self.project_path,
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return     # the user changed their mind
     
-            self.plot_files = fileDialog.GetPaths()
+            self.plot_files = fileDialog.GetPaths()   
+                   
             for file in self.plot_files:
                 self.plot_file_tc.write(str(file) + '\n')
+       
 
     def on_cancel(self, event):
         self.Destroy()
@@ -1582,7 +1606,7 @@ class newProject(newProjectDialog):
         self.project_file_name = self.project_path + self.project_name.replace(' ', '_')
         self.df_file = self.project_file_name + '.pkl'
         
-        if not self.project_name or not self.main_element_name or not self.linelist_file or not self.plot_files:
+        if not self.project_name or not self.main_element_name or not self.linelist_file:# or not self.plot_files:
             wx.MessageBox('Please fill in all fields before continuing', 'Missing Project Parameters', 
                       wx.OK | wx.ICON_EXCLAMATION)
         else:
@@ -1590,6 +1614,7 @@ class newProject(newProjectDialog):
 
     def on_other_lev_files_btn(self, event):
         with wx.FileDialog(self, "Select linelist file", wildcard="level files (*.lev)|*.lev",
+                       defaultDir=self.project_path,
                        style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE) as fileDialog:
 
             if fileDialog.ShowModal() == wx.ID_CANCEL:
