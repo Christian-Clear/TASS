@@ -278,10 +278,13 @@ class MyFrame(mainWindow):
         
     def save_df(self):
         """Saves the main pandas DataFrame self.df to the pickle file."""
+        self.df = self.df.sort_values(by=['wavenumber'])
         self.df.to_pickle(self.df_file)    
     
     def main_strans(self, strans_levs):
         """Runs strans for the main element under study"""
+        
+        self.strans_levs = self.strans_lev_ojlv.GetObjects()
         
         if self.blank_strans_lev in strans_levs:
             wx.MessageBox('STRANS input contains blank levels. \n\nPlease edit or delete these before running STRANS.', 'Blank Levels Found', 
@@ -294,39 +297,50 @@ class MyFrame(mainWindow):
                           wx.OK | wx.ICON_EXCLAMATION)
             self.frame_statusbar.SetStatusText('')
             return False
-                     
+        
         self.df['main_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in main_desig column with empty lists
-        desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()
+        tag_sep_linelist = self.get_tag_sep_linelist()
+        desig_list = self.df[['wavenumber', 'main_desig', 'line_tags']].values.tolist()  # list of all lines in the linelist
           
-        matched_lines = self.strans(strans_levs, desig_list, self.main_element_name)          
+        matched_lines = self.strans(strans_levs, desig_list, self.main_element_name, tag_sep_linelist)          
         self.df.update(matched_lines)  # update the main df with designations from strans
         self.display_strans_lines()
 
         return True    
+    
+    def get_tag_sep_linelist(self):
+        """returns a dictionary of lists of lines separated by tag type"""        
+        desig_list = {}
+        tags = self.df.tags.unique()  # get list of all tags for lines (L, G, P etc.)
         
+        for tag in tags:
+            desig_list[tag] = self.df[['wavenumber', 'main_desig', 'line_tags']].loc[self.df['tags'] == tag].values.tolist()    
+            
+        return desig_list
+    
     def other_strans(self, other_lev_list):
         """Runs strans for all other elements that could be present in the linelist"""                     
         self.df['other_desig'] = np.empty((len(self.df), 0)).tolist()  # replaces any values in other_desig column with empty lists
         desig_list = self.df[['wavenumber', 'other_desig', 'line_tags']].values.tolist()
+        tag_sep_linelist = self.get_tag_sep_linelist()
         
         for other_lev in other_lev_list:
             element_name, level_file = other_lev.split(',')
             strans_levs = list(pd.read_csv(level_file).transpose().to_dict().values())
-            matched_lines = self.strans(strans_levs, desig_list, element_name)
+            matched_lines = self.strans(strans_levs, desig_list, element_name, tag_sep_linelist)
 
         self.df.update(matched_lines)  # update the main df with designations from strans  
         self.display_strans_lines()
 
-    def strans(self, strans_levs, desig_list, element_name):
+    def strans(self, strans_levs, desig_list, element_name, tag_sep_linelist):
         """Creates list of all possible transitions between levels of opposite parity that obey
         the J selection rule. The list is then compared to all lines in the self.df database and lines with 
         wavenumbers that match within self.strans_wn_discrim are assigned the labels of the even and odd level.
         Inputs:
             strans_levs: list of levels to be used in strans
-            desig_list: list of line dicts to be matched by strans
+            desig_list: dict of lists of line dicts separated into tags to be matched by strans
             element_name: name of level's element'
-        """
-                    
+        """     
         self.frame_statusbar.SetStatusText(f'Running Line Matching for {element_name}')
                 
         strans_levs_even = [x for x in strans_levs if x['parity']==1]
@@ -334,6 +348,8 @@ class MyFrame(mainWindow):
         
         strans_levs_even = sorted(strans_levs_even, key=lambda x: x['j'])  # sorting by j value.
         strans_levs_odd = sorted(strans_levs_odd, key=lambda x: x['j'])
+        
+        self.strans_wn_discrim = {'P': 0.1, 'L': 0.02, 'G': 0.02, 'I': 0.02, 'F': 0.02}
         
         for even_lev in strans_levs_even:    
             j_even = even_lev['j']
@@ -351,25 +367,35 @@ class MyFrame(mainWindow):
                 energy_even = even_lev['energy']
                 energy_odd = odd_lev['energy']                   
                 match_wn = abs(energy_even - energy_odd)
-                    
-                left = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn - self.strans_wn_discrim)  # x[0] is line wavenumber
-                right = bisect.bisect_left(KeyList(desig_list, key=lambda x: x[0]), match_wn + self.strans_wn_discrim)
-                    
-                for matched_line in desig_list[left:right]:
+                
+                matched_lines = []
+                
+                for tag in tag_sep_linelist:  # find all matched lines, with wn matching tolerance set by tag type
+                    wn_discrim = self.strans_wn_discrim[tag]  # get wn_discrim for the type of tag
+                                        
+                    left = bisect.bisect_left(KeyList(tag_sep_linelist[tag], key=lambda x: x[0]), match_wn - wn_discrim)  # x[0] is line wavenumber
+                    right = bisect.bisect_left(KeyList(tag_sep_linelist[tag], key=lambda x: x[0]), match_wn + wn_discrim)
+                
+                    matched_lines += tag_sep_linelist[tag][left:right]  # add the list of matched lines to the main matched_lines list
+
+                for matched_line in matched_lines:
                     #matched line is a list of:[line wavenumber, [level assignment dicts], {line tags}]
                     
-                    if len(desig_list[left:right]) > 1:  # multiple lines match this transtion
-                        matched_line[2]['multiple_lines'] = True
+                    desig_index = next(i for i,v in enumerate(desig_list) if matched_line[0] in v)  # this gives the index of matched_line in the main desig_list
+                    
+                    if len(matched_lines) > 1:  # multiple lines match this transtion
+                        desig_list[desig_index][2]['multiple_lines'] = True
                     
                     if energy_even > energy_odd:  # assign upper and lower levels correctly (LOPT needs them in lower-upper format)
                         upper_lev = label_even
                         lower_lev = label_odd
                     else:
                         upper_lev = label_odd
-                        lower_lev = label_even
-                        
-                    matched_line[1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})  # this is being added to the lines in desig_list that were matched.
-                                        
+                        lower_lev = label_even    
+                    
+                    # because we found the desig_list index, we can modify the desig_list item directly                        
+                    desig_list[desig_index][1].append({'upper_level':upper_lev, 'lower_level':lower_lev, 'element_name': element_name})  # this is being added to the lines in desig_list that were matched.
+            
         return desig_list
     
              
@@ -812,7 +838,7 @@ class MyFrame(mainWindow):
         
       
     def levhams_match_tol(self, line_list, tol):
-        """Generator function to split predicted lines into groups with each element sperarated from its neighbour 
+        """Generator function to split predicted lines into groups with each element separated from its neighbour 
         by a maximium given tolerance.
         """
         matches = []
@@ -833,6 +859,8 @@ class MyFrame(mainWindow):
         in each group. Also highlights the summary row."""
                      
         num_levels = 0
+        
+        self.levhams_output_ojlv.DeleteAllItems()  # clear the ojlv
         
         for level in levels:            
             if len(level) >= self.levhams_min_matches:
@@ -1285,7 +1313,6 @@ class MyFrame(mainWindow):
             
             try:
                 p = subprocess.run(['java', '-jar', 'Lopt.jar', self.lopt_par_file.split('/')[-1]], cwd='lopt/', capture_output=True, text=True).stdout.split('\n')  # run LOPT and get output as a list of lines
-                print(p)
                 rss = [x for x in p if 'RSS' in x]  # gives the RSS\degrees_of_freedom line
                 tot_time = [x for x in p if 'Total time' in x]  # gives the total time line
                 self.frame_statusbar.SetStatusText(f'LOPT ran successfully:  {rss[0]}. {tot_time[0]}.')  

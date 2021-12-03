@@ -1,24 +1,75 @@
 Designation	Energy	D1	D2	D3	N_lines	Comments
-d9  2D2	0	0	0	_[3]	0	fixed by user
-s2  4F4	51045.5256	0.0069	0.71	0.0079	5	
-s2  4F3	52206.014	0.015	0.71	0.046	4	
-s2  4F2	53037.942	0.027	2.0	0.026[2]	1	
-s2  4F1	53601.192	0.042	2.0	0.042[2]	1	
-3F5p  4D3	103652.9	0	2.0	_[11]	0	fixed by user
-3F5p  2G4	104080.9150	0.0095	2.0	_	1	fixed by user
-3F5p  4G5	104147.205	0.030	2.0	0.027	1	fixed by user
-3F5p  4F4	104298.092	0.012	2.0	0.013	1	fixed by user
-3F5p  4D2	104503.1	0	2.0	_[10]	0	fixed by user
-3F5p    3	104646.382	0.024	2.0	0.031	2	fixed by user
-3F5p  4D1	105439.7	0	2.0	_[9]	0	fixed by user
-3F5p  4G3	105498.896	0.030	2.0	0.055	1	fixed by user
-3F5p  4G4	105588.710	0.032	2.0	0.033	1	fixed by user
-3F5p  4F2	105668.621	0.030	2.0	0.055	1	fixed by user
-3F5p  2F3	105837.880	0.027	2.0	0.053	1	fixed by user
-3F5p  2D2	105861.0	0	2.0	_[5]	0	fixed by user
-3F5p  4D0	106022.6	0	2.0	_[8]	0	fixed by user
-3F5p  4G2	106283.0	0	2.0	_[12]	0	fixed by user
-3F5p  4F1	106369.14	0	2.00	_[2]	0	fixed by user
-3F5p  2G3	106620.4	0	2.0	_[7]	0	fixed by user
-3F5p  2F2	107082.0	0	2.0	_[6]	0	fixed by user
-3F5p  2D1	107141.9	0	2.0	_[4]	0	fixed by user
+d9  2D2	0.000	0.035	0	_	43, 25B	fixed by user
+s2  4F4	51045.5355	0.0037	0.053	_	15, 10B	
+3F4p  4D3	51557.7248	0.0010	2.0	_	2, 1B	fixed by user
+s2  4F3	52206.0127	0.0018	0.057	_	18, 8B	
+3F4p  4D2	52738.29880	0.00088	1.2	_	6, 3B	fixed by user
+s2  4F2	53037.921	0.022	0.062	_	11, 2B	
+3F4p  4G4	53365.0395	0.0014	2.0	_	2	fixed by user
+3F4p  4G5	53496.4	0	2.0	_[2]	0	fixed by user
+s2  4F1	53601.144	0.038	0.090	_	5, 2B	
+3F4p  4D1	53634.5150	0.0011	2.0	_	2	fixed by user
+3F4p  4D0	54176.1447	0.0014	2.0	_	1	fixed by user
+3F4p  4G3	54262.5203	0.0024	1.2	_	6, 2B	fixed by user
+3F4p  4F4	54556.9460	0.0017	2.0	_	2, 1L	fixed by user
+3F4p  4G2	55018.56	0.15	0.15	_	1	fixed by user
+3F4p  2G4	55299.59720	0.00082	2.0	_	3	fixed by user
+3F4p  4F3	55417.6565	0.0046	1.2	_	4, 2B	fixed by user
+3F4p  4F2	56075.0648	0.0067	1.2	_	3, 2B	fixed by user
+3F4p  2G3	56371.2769	0.0011	1.2	_	7, 2B, 2L	fixed by user
+3F4p  4F1	56424.30	0.16	0.16	_	1	fixed by user
+3F4p  2F3	57080.37780	0.00099	1.2	_	6, 3B	fixed by user
+3F4p  2D2	57420.0091	0.0021	1.2	_	5, 2B	fixed by user
+3F4p  2F2	58493.06780	0.00082	1.2	_	7, 4B	fixed by user
+3F4p  2D1	58705.6944	0.0059	1.2	_	3, 2B	fixed by user
+3P4p  4P2	66571.1	1.0	1.2	_	3, 3B	fixed by user
+3P4p  4P1	66579.549	0.090	0.089	_	1	fixed by user
+3P4p  4P0	67030.8	0	2.0	_[3]	0	fixed by user
+1D4p  2F2	67694.4	1.4	2.0	_	1, 1B	fixed by user
+s2  4P2	67879.97092	0.00089	0.054	_	3	
+1D4p  2F3	68131.0	1.2	1.2	_	2, 2B	fixed by user
+1D4p  2D1	68154.0910	0.0015	0.23	_	4	fixed by user
+s2  4P1	68156.42110	0.00090	0.054	_	4, 2B	
+1D4p  2P0	68281.43790	0.00082	2.0	_	1	fixed by user
+s2  4P0	68709.57693	0.00097	0.054	_	3, 1B	
+1D4p  2D2	68735.7724	0.0015	1.0	_	5, 3B	fixed by user
+1D4p  2P1	68965.4762	0.0012	0.095	_	2	fixed by user
+s2  2G4	70358.74217	0.00077	0.053	_	6, 1B, 2L	
+3P4p  4D2	70635.2711	0.0017	0.100	_	3	fixed by user
+3P4p  4D1	70706.57	0.10	0.100	_	1	fixed by user
+3P4p  4D0	70748.5	0	2.0	_[4]	0	fixed by user
+3P4p  4D3	70777.94	0.12	0.10	_	1	fixed by user
+s2  2G3	71457.61006	0.00074	0.053	_	8, 2B, 1L	
+3P4p  2D2	71770.6475	0.0098	0.26	_	3, 1B	fixed by user
+3P4p  2D1	72375.219	0.011	0.10	_	3, 1B	fixed by user
+3P4p  2P1	72985.4276	0.0024	0.26	_	2	fixed by user
+s2  2P1	73893.61460	0.00074	0.054	_	6, 4B	
+3P4p  2P0	73903.0	0	2.0	_[6]	0	fixed by user
+3P4p  2S0	74283.1	0	2.0	_[5]	0	fixed by user
+3P4p  4S1	74300.63	0.13	0.11	_	3, 2B	fixed by user
+s2  2H5	76727.26688	0.00081	0.053	_	3	
+s2 2D22	77332.31951	0.00092	0.053	_	6, 1B	
+s2  2H4	77736.6565	0.0014	0.053	_	4	
+s2 2D21	78955.3530	0.0030	0.053	_	2	
+s2  2F2	92373.2539	0.0048	0.054	_	6, 1B	
+s2  2F3	92791.9201	0.0034	0.053	_	9, 3B	
+3F5p  4D3	103652.934	0.052	2.0	_	2	fixed by user
+3F5p  2G4	104080.915	0.056	2.0	_	3, 2B	fixed by user
+3F5p  4G5	104147.2	1.2	2.0	_	2, 2B	fixed by user
+3F5p  4F4	104298.1	1.2	2.0	_	2, 2B	fixed by user
+3F5p  4D2	104503.054	0.040	0.22	_	3	fixed by user
+3F5p    3	104646.382	0.053	0.22	_	6, 4B	fixed by user
+3F5p  4D1	105439.687	0.039	2.0	_	2	fixed by user
+3F5p  4G3	105498.896	0.061	2.0	_	3, 2B	fixed by user
+3F5p  4G4	105588.710	0.058	2.0	_	3, 2B	fixed by user
+3F5p  4F2	105668.621	0.063	2.0	_	3, 2B	fixed by user
+3F5p  2F3	105837.880	0.041	0.22	_	5, 2B	fixed by user
+3F5p  2D2	105861.034	0.099	0.54	_	3	fixed by user
+3F5p  4D0	106022.596	0.055	2.0	_	1	fixed by user
+3F5p  4G2	106283.005	0.042	0.54	_	4	fixed by user
+3F5p  4F1	106369.14	0.89	2.0	_	4, 4B	fixed by user
+3F5p  2G3	106620.377	0.058	0.23	_	3	fixed by user
+3F5p  2F2	107082.042	0.059	2.0	_	2	fixed by user
+3F5p  2D1	107141.92	0.15	2.0	_	1	fixed by user
+s2 2D12	115870.0007	0.0021	0.057	_	5, 2B	
+2Fsp3P 4D2	133973.106	0.070	0.082	_	9, 6B	
